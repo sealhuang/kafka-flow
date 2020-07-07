@@ -59,34 +59,67 @@ if __name__ == '__main__':
         envs['OSS_BUCKET_NAME'],
     )
 
-    # upload file
-    upload_files = {
-        'reading': [
-            os.path.join(os.path.curdir, 'leveledReadingPersonalMid.pdf'),
-            os.path.join('erdaoqu', 'reading.pdf'),
-        ],
-        'intel': [
-            os.path.join(os.path.curdir, 'ztmt.pdf'),
-            os.path.join('erdaoqu', 'intel.pdf'),
-        ],
-    }
-    base_url = '.'.join([envs['OSS_BUCKET_NAME'], envs['OSS_ENDPOINT_NAME']])
-    uploaded_msg = upload_file(bucket, base_url, upload_files)
+    #-- kafka consumer
+    consumer = KafkaConsumer(
+        envs['KAFKA_REC_TOPIC'],
+        # group_id='test',
+        # enable_auto_commit=True,
+        # auto_commit_interval_ms=2,
+        sasl_mechanism='PLAIN',
+        security_protocol='SASL_PLAINTEXT',
+        sasl_plain_username=envs['KAFKA_USER'],
+        sasl_plain_password=envs['KAFKA_PWD'],
+        bootstrap_servers = envs['KAFKA_BOOTSTRAP_SERVERS'],
+    )
+    for msg in consumer:
+        line = msg.value.decode('utf-8')
+        line = line.strip()
+        print(line)
+    
+
+    #-- upload file
+    #upload_files = {
+    #    #'reading': [
+    #    #    os.path.join(os.path.curdir, 'leveledReadingPersonalMid.pdf'),
+    #    #    os.path.join('erdaoqu', 'reading.pdf'),
+    #    #],
+    #    #'intel': [
+    #    #    os.path.join(os.path.curdir, 'ztmt.pdf'),
+    #    #    os.path.join('erdaoqu', 'intel.pdf'),
+    #    #],
+    #    'reading': [
+    #        os.path.join(os.path.curdir, 'test.pdf'),
+    #        os.path.join('samples', 'report.pdf'),
+    #    ],
+    #}
+    #base_url = '.'.join([envs['OSS_BUCKET_NAME'], envs['OSS_ENDPOINT_NAME']])
+    #uploaded_msg = upload_file(bucket, base_url, upload_files)
+    #print(uploaded_msg)
 
     # if uploaded_msg is not empty, send message
-    producer = KafkaProducer(
-        bootstrap_servers = envs['KAFKA_BOOTSTRAP_SERVERS'],
-        value_serializer = lambda v: json.dumps(v).encode('utf-8'),
-    )
-    if uploaded_msg:
-        # XXX: add user id to uploaded_msg
-        producer.send(envs['KAFKA_SEND_TOPIC'], uploaded_msg)
+    #producer = KafkaProducer(
+    #    sasl_mechanism='PLAIN',
+    #    security_protocol='SASL_PLAINTEXT',
+    #    sasl_plain_username=envs['KAFKA_USER'],
+    #    sasl_plain_password=envs['KAFKA_PWD'],
+    #    bootstrap_servers = envs['KAFKA_BOOTSTRAP_SERVERS'],
+    #    value_serializer = lambda v: json.dumps(v).encode('utf-8'),
+    #)
+    #if uploaded_msg:
+    #    # XXX: add user id to uploaded_msg
+    #    producer.send(envs['KAFKA_SEND_TOPIC'], uploaded_msg)
 
     # remove file
     #oss_list = [upload_files[k][1] for k in upload_files]
     #delete_files(bucket, oss_list)
     
-    # list files
-    #for b in islice(oss2.ObjectIterator(bucket), 10):
-    #    print(b.key)
+    #-- list files
+    #for obj in oss2.ObjectIterator(bucket, delimiter='/'):
+    #    # list dir
+    #    if obj.is_prefix():
+    #        print('-'*10)
+    #        print(obj.key)
+    #    # list files
+    #    else:
+    #        print(obj.key)
 
