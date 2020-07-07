@@ -69,7 +69,7 @@ if __name__ == '__main__':
         security_protocol='SASL_PLAINTEXT',
         sasl_plain_username=envs['KAFKA_USER'],
         sasl_plain_password=envs['KAFKA_PWD'],
-        bootstrap_servers = envs['KAFKA_BOOTSTRAP_SERVERS'],
+        bootstrap_servers = [envs['KAFKA_BOOTSTRAP_SERVERS']],
     )
     for msg in consumer:
         line = msg.value.decode('utf-8')
@@ -102,7 +102,7 @@ if __name__ == '__main__':
     #    security_protocol='SASL_PLAINTEXT',
     #    sasl_plain_username=envs['KAFKA_USER'],
     #    sasl_plain_password=envs['KAFKA_PWD'],
-    #    bootstrap_servers = envs['KAFKA_BOOTSTRAP_SERVERS'],
+    #    bootstrap_servers = [envs['KAFKA_BOOTSTRAP_SERVERS']],
     #    value_serializer = lambda v: json.dumps(v).encode('utf-8'),
     #)
     #if uploaded_msg:
