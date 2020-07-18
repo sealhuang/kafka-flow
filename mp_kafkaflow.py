@@ -290,6 +290,8 @@ if __name__ == '__main__':
                 },
             )
             c += 1
+        else:
+            time.sleep(0.01)
 
 
     # remove file
