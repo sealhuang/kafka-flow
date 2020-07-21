@@ -17,20 +17,23 @@ from kafka import KafkaConsumer, KafkaProducer
 
 
 class KafkaReceiver(multiprocessing.Process):
+    """Message Receiver for the Sundial-Report-Stream."""
+
     def __init__(self, envs, queue):
         """Initialize kafka message receiver process."""
         multiprocessing.Process.__init__(self)
 
         self.consumer = KafkaConsumer(
             envs['KAFKA_REC_TOPIC'],
-            # group_id='test',
+            group_id=envs['KAFKA_REC_GRP'],
             # enable_auto_commit=True,
             # auto_commit_interval_ms=2,
-            sasl_mechanism='PLAIN',
-            security_protocol='SASL_PLAINTEXT',
+            sasl_mechanism=envs['KAFKA_SASL_MECH'],
+            security_protocol=envs['KAFKA_SECURITY_PROTO'],
             sasl_plain_username=envs['KAFKA_USER'],
             sasl_plain_password=envs['KAFKA_PWD'],
             bootstrap_servers = [envs['KAFKA_BOOTSTRAP_SERVERS']],
+            auto_offset_reset=envs['KAFKA_AUTO_OFFSET_RST'],
         )
 
         self.queue = queue
@@ -249,12 +252,13 @@ if __name__ == '__main__':
     #-- process data
     # initialize kafka producer
     producer = KafkaProducer(
-        sasl_mechanism='PLAIN',
-        security_protocol='SASL_PLAINTEXT',
+        sasl_mechanism=envs['KAFKA_SASL_MECH'],
+        security_protocol=envs['KAFKA_SECURITY_PROTO'],
         sasl_plain_username=envs['KAFKA_USER'],
         sasl_plain_password=envs['KAFKA_PWD'],
         bootstrap_servers = [envs['KAFKA_BOOTSTRAP_SERVERS']],
         value_serializer = lambda v: json.dumps(v).encode('utf-8'),
+        retries=5,
     )
 
     # connect aliyun
