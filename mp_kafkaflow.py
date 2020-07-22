@@ -237,16 +237,16 @@ if __name__ == '__main__':
 
     # create data queue for multiprocessing
     data_manager = multiprocessing.Manager()
-    queue = data_manager.Queue(5)
+    queue = data_manager.Queue(100)
 
 
     #-- initialize kafka msg receiver process
-    #kafka_receiver = KafkaReceiver(envs, queue)
-    #kafka_receiver.start()
+    kafka_receiver = KafkaReceiver(envs, queue)
+    kafka_receiver.start()
 
     # for test
     # Create a writer
-    multiprocessing.Process(target=queue_writer, args=(queue,)).start()
+    #multiprocessing.Process(target=queue_writer, args=(queue,)).start()
 
 
     #-- process data
@@ -272,19 +272,21 @@ if __name__ == '__main__':
     c = 1
     while True:
         if not queue.empty():
-            msg = queue.get()
+            raw_msg = queue.get()
+            msg = json.loads(raw_msg.value.decode('utf-8'))
             print(msg)
             # XXX: get report type and user data from kafka message
-            report_type = 'sample'
-            data_dict = {
-                'user_id': 's00'+str(c),
-                'var1': 1,
-                'var2': 2,
-            }
+            report_type = msg['reportType']
+            data_dict = msg['data']
+            #data_dict = {
+            #    'user_id': 's00'+str(c),
+            #    'var1': 1,
+            #    'var2': 2,
+            #}
             pool.apply_async(
                 generate_report,
                 (
-                    data_dict['user_id'],
+                    data_dict['id'],
                     report_type,
                 ),
                 {
