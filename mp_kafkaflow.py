@@ -277,7 +277,7 @@ if __name__ == '__main__':
             print(msg)
             # XXX: get report type and user data from kafka message
             report_type = msg['reportType']
-            data_dict = msg['data']
+            data_dict = eval(msg['data'])
             #data_dict = {
             #    'user_id': 's00'+str(c),
             #    'var1': 1,
