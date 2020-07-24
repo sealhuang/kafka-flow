@@ -7,8 +7,6 @@ import datetime
 import shutil
 import subprocess
 from configparser import ConfigParser
-import logging
-import logging.handlers
 
 import oss2
 from kafka import KafkaConsumer, KafkaProducer
