@@ -6,6 +6,8 @@ from itertools import islice
 import datetime
 import random
 import time
+import logging
+import logging.handlers
 import shutil
 import subprocess
 import multiprocessing
@@ -44,6 +46,29 @@ class KafkaReceiver(multiprocessing.Process):
             line = msg.value.decode('utf-8').strip()
             #print(line)
             self.queue.put(line)
+
+def get_logger(log_level=logging.DEBUG):
+    logger = logging.getLogger('logger')
+
+    # set log file size
+    handler = logging.handlers.RotatingFileHandler(
+        'logs/runinfo.log',
+        maxBytes=10*1024*1024,
+        backupCount=5,
+        encoding='utf-8',
+    )
+
+    # set log level
+    logger.setLevel(log_level)
+    handler.setLevel(log_level)
+
+    # set log format
+    formatter = logging.Formatter('[%(asctime)s] %(levelname)s %(message)s')
+    handler.setFormatter(formatter)
+
+    logger.addHandler(handler)
+
+    return logger
 
 def get_report_gallery(config_file='./report_gallery.config'):
     """Read report gallery config file."""
@@ -287,8 +312,7 @@ if __name__ == '__main__':
     pool = multiprocessing.Pool(int(envs['general']['mp_worker_num']))
 
     # logging
-    log_file = os.path.join(os.path.curdir, 'runinfo.log')
-    log_handler = open(log_file, 'a')
+    logger = get_logger()
 
     # generate report
     while True:
@@ -298,12 +322,7 @@ if __name__ == '__main__':
             print(msg)
             # check the data validation
             if not msg['data']:
-                ts = datetime.datetime.strftime(
-                    datetime.datetime.now(),
-                    '%Y%m%d-%H%M%S',
-                )
-                log_handler.write('[%s] No data found in %s\n'%(ts, str(msg)))
-                log_handler.flush()
+                logger.info('No data found in %s'%(str(msg)))
                 #print('Not find data in message.')
                 continue
             data_dict = eval(msg['data'])
@@ -332,20 +351,16 @@ if __name__ == '__main__':
                     #print('Error!')
                     #print(msg)
                     #print(e)
-                    ts = datetime.datetime.strftime(
-                        datetime.datetime.now(),
-                        '%Y%m%d-%H%M%S',
+                    logger.error(
+                        'Error while sending kafka message - %s'%(str(msg)),
+                        exc_info=True,
                     )
-                    log_handler.write('[%s] %s'%(ts, e)+'\n')
-                    log_handler.flush()
             else:
-                ts = datetime.datetime.strftime(
-                    datetime.datetime.now(),
-                    '%Y%m%d-%H%M%S',
-                )
-                log_handler.write('[%s] %s'%(ts, str(msg))+'\n')
-                log_handler.flush()
                 #print(msg)
+                logger.error(
+                    'Error while printing.\nArgs: %s\nErr: %s' %
+                        (msg['args'], msg['stderr']),
+                )
         else:
             time.sleep(0.01)
 
