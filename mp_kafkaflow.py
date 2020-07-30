@@ -47,26 +47,47 @@ class KafkaReceiver(multiprocessing.Process):
             #print(line)
             self.queue.put(line)
 
-def get_logger(log_level=logging.DEBUG):
+def get_json_logger(log_level=logging.DEBUG):
     logger = logging.getLogger('logger')
+    logger.setLevel(log_level)
 
-    # set log file size
+    # set json format log file
     handler = logging.handlers.RotatingFileHandler(
-        'logs/runinfo.json',
+        'logs/log.json',
         maxBytes=10*1024*1024,
         backupCount=20,
         encoding='utf-8',
     )
-
     # set log level
+    handler.setLevel(log_level)
+
+    # set json format
+    formatter = logging.Formatter(
+        '{"@timestamp":"%(asctime)s.%(msecs)03dZ","severity":"%(levelname)s","service":"jupyter-reporter",%(message)s}',
+        datefmt='%Y-%m-%dT%H:%M:%S',
+    )
+    handler.setFormatter(formatter)
+
+    logger.addHandler(handler)
+
+    return logger
+
+def get_err_logger(log_level=logging.DEBUG):
+    logger = logging.getLogger('logger')
     logger.setLevel(log_level)
+
+    # set log file
+    handler = logging.handlers.RotatingFileHandler(
+        'logs/error.log',
+        maxBytes=10*1024*1024,
+        backupCount=10,
+        encoding='utf-8',
+    )
+    # set log level
     handler.setLevel(log_level)
 
     # set log format
-    #formatter = logging.Formatter('[%(asctime)s] %(levelname)s %(message)s')
-    formatter = logging.Formatter(
-        '{"@timestamp":"%(asctime)s.%(msecs)03dZ","severity":"%(levelname)s","service":"jupyter-reporter",%(message)s}',
-        datefmt='%Y-%m-%dT%H:%M:%S')
+    formatter = logging.Formatter('[%(asctime)s] %(levelname)s %(message)s')
     handler.setFormatter(formatter)
 
     logger.addHandler(handler)
@@ -315,17 +336,19 @@ if __name__ == '__main__':
     pool = multiprocessing.Pool(int(envs['general']['mp_worker_num']))
 
     # logging
-    logger = get_logger()
+    json_logger = get_json_logger()
+    err_logger = get_err_logger()
 
     # generate report
     while True:
+        on_duty = False
         if not in_queue.empty():
             raw_msg = in_queue.get()
             msg = json.loads(raw_msg)
             print(msg)
             # check the data validation
             if not msg['data']:
-                logger.info('"rest": "No data found in %s"'%(str(msg)))
+                json_logger.info('"rest": "No data found in %s"'%(str(msg)))
                 #print('Not find data in message.')
                 continue
             data_dict = eval(msg['data'])
@@ -343,7 +366,10 @@ if __name__ == '__main__':
                     'base_url': base_url,
                 },
             )
-        elif not out_queue.empty():
+
+            on_duty = True
+
+        if not out_queue.empty():
             msg = out_queue.get()
             msg = json.loads(msg)
             if msg['status']=='ok':
@@ -354,7 +380,7 @@ if __name__ == '__main__':
                     #print('Error!')
                     #print(msg)
                     #print(e)
-                    logger.error(
+                    json_logger.error(
                         '"rest":"Error while sending kafka message - %s"'%(str(msg)),
                         exc_info=True,
                     )
@@ -364,7 +390,13 @@ if __name__ == '__main__':
                     '"rest":"Error while printing","args":"%s"' %
                     (msg['args'].replace('\n', ';').replace('"', "'")),
                 )
-        else:
-            time.sleep(0.01)
+                err_logger.error(
+                    'Error while printing.\nArgs: %s\nErr: %s' %
+                        (msg['args'], msg['stderr']),
+                )
 
+            on_duty = True
+
+        if not on_duty:
+            time.sleep(0.01)
 
