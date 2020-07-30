@@ -52,9 +52,9 @@ def get_logger(log_level=logging.DEBUG):
 
     # set log file size
     handler = logging.handlers.RotatingFileHandler(
-        'logs/runinfo.log',
+        'logs/runinfo.json',
         maxBytes=10*1024*1024,
-        backupCount=5,
+        backupCount=20,
         encoding='utf-8',
     )
 
@@ -63,7 +63,10 @@ def get_logger(log_level=logging.DEBUG):
     handler.setLevel(log_level)
 
     # set log format
-    formatter = logging.Formatter('[%(asctime)s] %(levelname)s %(message)s')
+    #formatter = logging.Formatter('[%(asctime)s] %(levelname)s %(message)s')
+    formatter = logging.Formatter(
+        '{"@timestamp":"%(asctime)s.%(msecs)03dZ","severity":"%(levelname)s","service":"jupyter-reporter",%(message)s}',
+        datefmt='%Y-%m-%dT%H:%M:%S')
     handler.setFormatter(formatter)
 
     logger.addHandler(handler)
@@ -95,7 +98,7 @@ def generate_report(user_id, report_type, out_queue, data_dict=None,
     """Workflow for generating report."""
     # init return message
     uploaded_msg = {
-        'user_id': user_id,
+        'id': user_id,
         'report_type': report_type,
         'status': 'ok',
     }
@@ -267,7 +270,7 @@ def queue_writer(q):
             msg = {
                 'reportType': 'mathDiagnosisK8_v1',
                 'data': {
-                    'id': '00'+str(i),
+                    'ticketID': '00'+str(i),
                     'var1': 1,
                     'var2': 2,
                 },
@@ -322,7 +325,7 @@ if __name__ == '__main__':
             print(msg)
             # check the data validation
             if not msg['data']:
-                logger.info('No data found in %s'%(str(msg)))
+                logger.info('"rest": "No data found in %s"'%(str(msg)))
                 #print('Not find data in message.')
                 continue
             data_dict = eval(msg['data'])
@@ -330,7 +333,7 @@ if __name__ == '__main__':
             pool.apply_async(
                 generate_report,
                 (
-                    data_dict['id'],
+                    data_dict['ticketID'],
                     msg['reportType'],
                     out_queue,
                 ),
@@ -352,14 +355,14 @@ if __name__ == '__main__':
                     #print(msg)
                     #print(e)
                     logger.error(
-                        'Error while sending kafka message - %s'%(str(msg)),
+                        '"rest":"Error while sending kafka message - %s"'%(str(msg)),
                         exc_info=True,
                     )
             else:
                 #print(msg)
                 logger.error(
-                    'Error while printing.\nArgs: %s\nErr: %s' %
-                        (msg['args'], msg['stderr']),
+                    '"rest":"Error while printing","args":"%s"' %
+                    (msg['args'].replace('\n', ';').replace('"', "'")),
                 )
         else:
             time.sleep(0.01)
