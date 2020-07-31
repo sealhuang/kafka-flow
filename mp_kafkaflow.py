@@ -66,28 +66,7 @@ def get_json_logger(log_level=logging.DEBUG):
         '{"@timestamp":"%(asctime)s.%(msecs)03dZ","severity":"%(levelname)s","service":"jupyter-reporter",%(message)s}',
         datefmt='%Y-%m-%dT%H:%M:%S',
     )
-    handler.setFormatter(formatter)
-
-    logger.addHandler(handler)
-
-    return logger
-
-def get_err_logger(log_level=logging.DEBUG):
-    logger = logging.getLogger('logger')
-    logger.setLevel(log_level)
-
-    # set log file
-    handler = logging.handlers.RotatingFileHandler(
-        'logs/error.log',
-        maxBytes=10*1024*1024,
-        backupCount=10,
-        encoding='utf-8',
-    )
-    # set log level
-    handler.setLevel(log_level)
-
-    # set log format
-    formatter = logging.Formatter('[%(asctime)s] %(levelname)s %(message)s')
+    formatter.converter = time.gmtime
     handler.setFormatter(formatter)
 
     logger.addHandler(handler)
@@ -145,6 +124,8 @@ def generate_report(user_id, report_type, out_queue, data_dict=None,
     pdf_dir = os.path.join(base_dir, 'pdfs')
     if not os.path.exists(pdf_dir):
         os.makedirs(pdf_dir, mode=0o755)
+    # def img dir
+    img_dir = os.path.join(base_dir, 'imgs')
 
     # save input data as json file
     json_file = None
@@ -159,6 +140,7 @@ def generate_report(user_id, report_type, out_queue, data_dict=None,
     html_file = os.path.join(base_dir, 'raw_report_%s.html'%(user_id))
     nbconvert_cmd = [
         'jupyter-nbconvert',
+        '--ExecutePreprocessor.timeout=60',
         '--execute',
         '--to html',
         '--template=' + os.path.join(base_dir,'templates','report_sample.tpl'),
@@ -180,6 +162,10 @@ def generate_report(user_id, report_type, out_queue, data_dict=None,
         uploaded_msg['stderr'] = ret.stderr
         out_queue.put(json.dumps(uploaded_msg))
         #print('Error in nbconvert stage!')
+        # clean img dir
+        user_img_dir = os.path.join(img_dir, user_id)
+        if os.path.exists(user_img_dir):
+            shutil.rmtree(user_img_dir)
         return None
 
     # convert html file to standard format
@@ -234,6 +220,10 @@ def generate_report(user_id, report_type, out_queue, data_dict=None,
         uploaded_msg['stderr'] = ret.stderr
         out_queue.put(json.dumps(uploaded_msg))
         #print('Error in weasyprint stage!')
+        # clean img dir
+        user_img_dir = os.path.join(img_dir, user_id)
+        if os.path.exists(user_img_dir):
+            shutil.rmtree(user_img_dir)
         return None
 
     # clean
@@ -242,6 +232,9 @@ def generate_report(user_id, report_type, out_queue, data_dict=None,
         shutil.move(json_file, targ_file)
     os.remove(html_file)
     os.remove(std_html_file)
+    user_img_dir = os.path.join(img_dir, user_id)
+    if os.path.exists(user_img_dir):
+        shutil.rmtree(user_img_dir)
 
     remote_file = os.path.join(report_cfg['oss_dir'], pdf_filename)
     
@@ -337,7 +330,6 @@ if __name__ == '__main__':
 
     # logging
     json_logger = get_json_logger()
-    err_logger = get_err_logger()
 
     # generate report
     while True:
@@ -386,14 +378,15 @@ if __name__ == '__main__':
                     )
             else:
                 #print(msg)
-                logger.error(
+                json_logger.error(
                     '"rest":"Error while printing","args":"%s"' %
                     (msg['args'].replace('\n', ';').replace('"', "'")),
                 )
-                err_logger.error(
-                    'Error while printing.\nArgs: %s\nErr: %s' %
-                        (msg['args'], msg['stderr']),
-                )
+                print('*'*20)
+                print('Error while printing!\nArgs:')
+                print(msg['args'])
+                print('Err:')
+                print(msg['stderr'])
 
             on_duty = True
 
