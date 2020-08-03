@@ -369,7 +369,7 @@ if __name__ == '__main__':
         if not in_queue.empty():
             raw_msg = in_queue.get()
             msg = json.loads(raw_msg)
-            print(msg)
+            #print(msg)
             # check the data validation
             if not msg['data']:
                 json_logger.info('"rest": "No data found in %s"'%(str(msg)))
