@@ -2,19 +2,49 @@
 
 import os
 import json
-from itertools import islice
 import datetime
 import random
 import time
+import gzip
 import logging
-import logging.handlers
 import shutil
 import subprocess
 import multiprocessing
 from configparser import ConfigParser
+from logging.handlers import TimedRotatingFileHandler
 
 import oss2
 from kafka import KafkaConsumer, KafkaProducer
+
+
+class TimedRotatingCompressedFileHandler(TimedRotatingFileHandler):
+    """Extended version of TimedRotatingFileHandler that compress 
+    logs on rollover.
+    """
+    def __init__(self, filename='', when='W6', interval=1,
+                 backup_count=50, encoding='utf-8'):
+        super(TimedRotatingCompressedFileHandler, self).__init__(
+            filename=filename,
+            when=when,
+            interval=int(interval),
+            backupCount=int(backup_count),
+            encoding=encoding,
+        )
+
+    def doRollover(self):
+        super(TimedRotatingCompressedFileHandler, self).doRollover()
+        log_dir = os.path.dirname(self.baseFilename)
+        to_compress = [
+            os.path.join(log_dir, f) for f in os.listdir(log_dir)
+            if f.startswith(
+                os.path.basename(os.path.splitext(self.baseFilename)[0])
+            ) and not f.endswith(('.gz', '.json'))
+        ]
+        for f in to_compress:
+            if os.path.exists(f):
+                with open(f, 'rb') as _old, gzip.open(f+'.gz', 'wb') as _new:
+                    shutil.copyfileobj(_old, _new)
+                os.remove(f)
 
 
 class KafkaReceiver(multiprocessing.Process):
@@ -47,15 +77,17 @@ class KafkaReceiver(multiprocessing.Process):
             #print(line)
             self.queue.put(line)
 
+
 def get_json_logger(log_level=logging.DEBUG):
     logger = logging.getLogger('logger')
     logger.setLevel(log_level)
 
     # set json format log file
-    handler = logging.handlers.RotatingFileHandler(
+    handler = TimedRotatingCompressedFileHandler(
         'logs/log.json',
-        maxBytes=10*1024*1024,
-        backupCount=20,
+        when='W6',
+        interval=1,
+        backupCount=50,
         encoding='utf-8',
     )
     # set log level
