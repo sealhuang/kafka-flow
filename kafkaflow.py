@@ -79,12 +79,18 @@ class KafkaReceiver(multiprocessing.Process):
 
 
 def get_json_logger(log_level=logging.DEBUG):
+    """Logger initialization."""
+    # init log dir
+    log_dir = os.path.join(os.path.curdir, 'log')
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir, mode=0o755)
+
     logger = logging.getLogger('logger')
     logger.setLevel(log_level)
 
     # set json format log file
     handler = TimedRotatingCompressedFileHandler(
-        'logs/log.json',
+        os.path.join(log_dir, 'log.json'),
         when='W6',
         interval=1,
         backupCount=50,
