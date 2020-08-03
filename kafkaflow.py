@@ -93,7 +93,7 @@ def get_json_logger(log_level=logging.DEBUG):
         os.path.join(log_dir, 'log.json'),
         when='W6',
         interval=1,
-        backupCount=50,
+        backup_count=50,
         encoding='utf-8',
     )
     # set log level
