@@ -381,6 +381,9 @@ if __name__ == '__main__':
                 json_logger.info('"rest": "No data found in %s"'%(str(msg)))
                 #print('Not find data in message.')
                 continue
+            if msg['reportType']=='test':
+                json_logger.info('"rest": "Get test message - %s"'%(str(msg)))
+                continue
             data_dict = eval(msg['data'])
             #data_dict = msg['data']
             pool.apply_async(
