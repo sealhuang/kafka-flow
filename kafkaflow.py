@@ -132,7 +132,7 @@ def conn2aliyun(envs):
     return bucket
 
 def generate_report(user_id, report_type, out_queue, data_dict=None,
-                    bucket=None, base_url=None):
+                    bucket=None, base_url=None, dummy_base_url=None):
     """Workflow for generating report."""
     # init return message
     uploaded_msg = {
@@ -278,9 +278,11 @@ def generate_report(user_id, report_type, out_queue, data_dict=None,
     
     # upload file
     remote_url = upload_file(bucket, base_url, pdf_file, remote_file)
+
     if remote_url:
         uploaded_msg['status'] = 'ok'
-        uploaded_msg['urls'] = {report_type: remote_url}
+        dymmy_remote_url = 'https://'+dummy_base_url+'/'+remote_file
+        uploaded_msg['urls'] = {report_type: dummy_remote_url}
         out_queue.put(json.dumps(uploaded_msg))
     else:
         uploaded_msg['status'] = 'error'
@@ -362,6 +364,7 @@ if __name__ == '__main__':
         envs['aliyun']['oss_bucket_name'],
         envs['aliyun']['oss_endpoint_name'],
     ])
+    dummy_base_url = envs['aliyun']['dummy_oss_url']
 
     # Create multiprocessing pool to process data
     pool = multiprocessing.Pool(int(envs['general']['mp_worker_num']))
@@ -397,6 +400,7 @@ if __name__ == '__main__':
                     'data_dict': data_dict,
                     'bucket': bucket,
                     'base_url': base_url,
+                    'dummy_base_url': dummy_base_url,
                 },
             )
 
