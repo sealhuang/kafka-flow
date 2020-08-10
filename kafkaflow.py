@@ -298,17 +298,22 @@ def upload_file(bucket, base_url, src_file, remote_file):
     """
     # kafka message of upload files successfully
     uploaded_msg = {}
-    rsp = bucket.put_object_from_file(
-        remote_file,
-        src_file,
-    )
-    # if upload successfully
-    # XXX: should check file content using etag field (md5)
-    if rsp.status==200:
-        return 'https://'+base_url+'/'+remote_file
-    else:
+    try:
+        rsp = bucket.put_object_from_file(
+            remote_file,
+            src_file,
+        )
+        # if upload successfully
+        # XXX: should check file content using etag field (md5)
+        if rsp.status==200:
+            return 'https://'+base_url+'/'+remote_file
+        else:
+            print('%s error while uploading file %s'%(rsp.status, src_file))
+            return None
+    except:
         print('%s error while uploading file %s'%(rsp.status, src_file))
         return None
+
 
 def queue_writer(q):
     """For test."""
