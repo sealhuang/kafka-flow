@@ -418,6 +418,9 @@ if __name__ == '__main__':
                 try:
                     future = kafka_sender.send(envs['kafka']['send_topic'], msg)
                     future.get(timeout=10)
+                    json_logger.info(
+                        '"rest":"Generate report successfully - %s"'%(str(msg)),
+                    )
                 except Exception as e:
                     #print('Error!')
                     #print(msg)
