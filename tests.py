@@ -28,7 +28,7 @@ if __name__ == '__main__':
 
     kafka_sender = kafkaSender(envs['kafka'])
 
-    msg = {'message': 'test'}
+    msg = {'id': 'test', 'urls': {'a': 'b'}}
 
     try:
         future = kafka_sender.send(envs['kafka']['send_topic'], msg)
