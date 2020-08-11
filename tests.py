@@ -28,13 +28,12 @@ if __name__ == '__main__':
 
     kafka_sender = kafkaSender(envs['kafka'])
 
-    msg = {'id': 'test', 'urls': {'a': 'b'}}
+    msg = {'id': 'jfkjfkdsfjskljfidsofsaasfd', 'urls': {'fdsfd': 'https://bbbbb.cn/dhsjahdjs/dshjadhjsas.pdf'}, 'status': 'ok'}
 
     try:
         future = kafka_sender.send(envs['kafka']['send_topic'], msg)
-        record_metadata = future.get(timeout=10)
+        record_metadata = future.get(timeout=30)
         assert future.succeeded()
-        print('Successfully')
     except KafkaTimeoutError as kte:
         print('Error!')
         print(msg)
@@ -43,8 +42,10 @@ if __name__ == '__main__':
         print('Error!')
         print(msg)
         print(e)
-    except Exception as e:
+    except:
         print('Error!')
         print(msg)
-        print(e)
+    else:
+        print('Successfully')
+
 

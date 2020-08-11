@@ -282,7 +282,7 @@ def generate_report(user_id, report_type, out_queue, data_dict=None,
 
     if remote_url:
         uploaded_msg['status'] = 'ok'
-        dymmy_remote_url = 'https://'+dummy_base_url+'/'+remote_file
+        dummy_remote_url = 'https://'+dummy_base_url+'/'+remote_file
         uploaded_msg['urls'] = {report_type: dummy_remote_url}
         out_queue.put(json.dumps(uploaded_msg))
     else:
@@ -387,13 +387,18 @@ if __name__ == '__main__':
             #print(msg)
             # check the data validation
             if not msg['data']:
-                json_logger.info('"rest": "No data found in %s"'%(str(msg)))
+                json_logger.info('"rest":"No data found in %s"'%(str(msg)))
                 #print('Not find data in message.')
                 continue
             if msg['reportType']=='test':
-                json_logger.info('"rest": "Get test message - %s"'%(str(msg)))
+                json_logger.info('"rest":"Get test message - %s"'%(str(msg)))
                 continue
-            data_dict = eval(msg['data'])
+            try:
+                data_dict = eval(msg['data'])
+            except:
+                json_logger.error('"rest":"Get invalid data - %s"'%(str(msg)))
+                continue
+
             #data_dict = msg['data']
             pool.apply_async(
                 generate_report,
@@ -415,14 +420,12 @@ if __name__ == '__main__':
         if not out_queue.empty():
             msg = out_queue.get()
             msg = json.loads(msg)
+            #print(msg)
             if msg['status']=='ok':
                 try:
                     future = kafka_sender.send(envs['kafka']['send_topic'], msg)
                     record_metadata = future.get(timeout=30)
                     assert future.succeeded()
-                    json_logger.info(
-                        '"rest":"Generate report successfully - %s"'%(str(msg)),
-                    )
                 except KafkaTimeoutError as kte:
                     json_logger.error(
                         '"rest":"Timeout while sending kafka message - %s"'%(str(msg)),
@@ -433,14 +436,18 @@ if __name__ == '__main__':
                         '"rest":"KafkaError while sending kafka message - %s"'%(str(msg)),
                         exc_info=True,
                     )
-                except Exception as e:
+                except:
                     #print('Error!')
                     #print(msg)
-                    #print(e)
                     json_logger.error(
                         '"rest":"Exception while sending kafka message - %s"'%(str(msg)),
                         exc_info=True,
                     )
+                else:
+                    json_logger.info(
+                        '"rest":"Generate report successfully - %s"'%(str(msg)),
+                    )
+
             else:
                 #print(msg)
                 json_logger.error(
