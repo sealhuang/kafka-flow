@@ -5,6 +5,20 @@ import json
 from configparser import ConfigParser
 
 from kafka import KafkaConsumer, KafkaProducer
+from kafka.errors import KafkaError, KafkaTimeoutError
+
+
+def kafkaSender(envs):
+    kafka_sender = KafkaProducer(
+        sasl_mechanism = envs['sasl_mechanism'],
+        security_protocol = envs['security_protocol'],
+        sasl_plain_username = envs['user'],
+        sasl_plain_password = envs['pwd'],
+        bootstrap_servers = [envs['bootstrap_servers']],
+        value_serializer = lambda v: json.dumps(v).encode('utf-8'),
+        retries = 5,
+    )
+    return kafka_sender
 
 
 if __name__ == '__main__':
@@ -12,21 +26,22 @@ if __name__ == '__main__':
     envs = ConfigParser()
     envs.read('./env.config')
 
-    kafka_sender = KafkaProducer(
-        sasl_mechanism = envs['kafka']['sasl_mechanism'],
-        security_protocol = envs['kafka']['security_protocol'],
-        sasl_plain_username = envs['kafka']['user'],
-        sasl_plain_password = envs['kafka']['pwd'],
-        bootstrap_servers = [envs['kafka']['bootstrap_servers']],
-        value_serializer = lambda v: json.dumps(v).encode('utf-8'),
-        retries = 5,
-    )
+    kafka_sender = kafkaSender(envs['kafka'])
 
     msg = {'message': 'test'}
 
     try:
         future = kafka_sender.send(envs['kafka']['send_topic'], msg)
-        future.get(timeout=10)
+        record_metadata = future.get(timeout=10)
+        assert future.succeeded()
+    except KafkaTimeoutError as kte:
+        print('Error!')
+        print(msg)
+        print(e)
+    except KafkaError as ke:
+        print('Error!')
+        print(msg)
+        print(e)
     except Exception as e:
         print('Error!')
         print(msg)
