@@ -34,6 +34,7 @@ if __name__ == '__main__':
         future = kafka_sender.send(envs['kafka']['send_topic'], msg)
         record_metadata = future.get(timeout=10)
         assert future.succeeded()
+        print('Successfully')
     except KafkaTimeoutError as kte:
         print('Error!')
         print(msg)

@@ -15,6 +15,7 @@ from logging.handlers import TimedRotatingFileHandler
 
 import oss2
 from kafka import KafkaConsumer, KafkaProducer
+from kafka.errors import KafkaError, KafkaTimeoutError
 
 
 class TimedRotatingCompressedFileHandler(TimedRotatingFileHandler):
@@ -417,16 +418,27 @@ if __name__ == '__main__':
             if msg['status']=='ok':
                 try:
                     future = kafka_sender.send(envs['kafka']['send_topic'], msg)
-                    future.get(timeout=10)
+                    record_metadata = future.get(timeout=30)
+                    assert future.succeeded()
                     json_logger.info(
                         '"rest":"Generate report successfully - %s"'%(str(msg)),
+                    )
+                except KafkaTimeoutError as kte:
+                    json_logger.error(
+                        '"rest":"Timeout while sending kafka message - %s"'%(str(msg)),
+                        exc_info=True,
+                    )
+                except KafkaError as ke:
+                    json_logger.error(
+                        '"rest":"KafkaError while sending kafka message - %s"'%(str(msg)),
+                        exc_info=True,
                     )
                 except Exception as e:
                     #print('Error!')
                     #print(msg)
                     #print(e)
                     json_logger.error(
-                        '"rest":"Error while sending kafka message - %s"'%(str(msg)),
+                        '"rest":"Exception while sending kafka message - %s"'%(str(msg)),
                         exc_info=True,
                     )
             else:
