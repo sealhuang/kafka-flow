@@ -146,6 +146,7 @@ def generate_report(user_id, report_type, out_queue, data_dict=None,
 
     if report_type not in report_gallery:
         uploaded_msg['status'] = 'error'
+        uploaded_msg['args'] = ''
         uploaded_msg['detail'] = 'Not find report type.'
         out_queue.put(json.dumps(uploaded_msg))
         print('Error! Not find report type named %s'%(report_type))
