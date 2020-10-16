@@ -324,7 +324,7 @@ def save_msg(msg):
     if not os.path.exists(data_dir):
         os.makedirs(data_dir, mode=0o755)
 
-    data_file = os.path.join(data_dict, 'msgs.txt')
+    data_file = os.path.join(data_dir, 'msgs.txt')
     with open(data_file, 'a+') as f:
         f.write(msg+'\n')
 
