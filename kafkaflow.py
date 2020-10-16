@@ -326,7 +326,7 @@ def save_msg(msg):
 
     data_file = os.path.join(data_dir, 'msgs.txt')
     with open(data_file, 'a+') as f:
-        f.write(msg+'\n')
+        f.write(str(msg)+'\n')
 
 
 def queue_writer(q):
