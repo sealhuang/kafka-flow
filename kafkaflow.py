@@ -317,6 +317,17 @@ def upload_file(bucket, base_url, src_file, remote_file):
         print('%s error while uploading file %s'%(rsp.status, src_file))
         return None
 
+def save_msg(msg):
+    """Save message."""
+    # init message warehouse dir
+    data_dir = os.path.join(os.path.curdir, 'msg_pool')
+    if not os.path.exists(data_dir):
+        os.makedirs(data_dir, mode=0o755)
+
+    data_file = os.path.join(data_dict, 'msgs.txt')
+    with open(data_file, 'a+') as f:
+        f.write(msg+'\n')
+
 
 def queue_writer(q):
     """For test."""
@@ -392,9 +403,37 @@ if __name__ == '__main__':
                 json_logger.info('"rest":"No data found in %s"'%(str(msg)))
                 #print('Not find data in message.')
                 continue
-            if msg['reportType']=='test':
+
+            if not msg['reportType']:
+                json_logger.info('"rest": "Get unrelated message - %s"'%(str(msg)))
+
+            # get report type and the data purpose
+            if '|' in msg['reportType']:
+                report_type, data_purpose = msg['reportType'].split('|')
+            else:
+                report_type = msg['reportType']
+                data_purpose = 'REPORT'
+
+            # if we get a test message
+            if report_type=='test':
                 json_logger.info('"rest":"Get test message - %s"'%(str(msg)))
                 continue
+
+            # normalize message structure
+            msg['reportType'] = report_type
+            msg['reportProcessStatus'] = data_purpose
+            ts = datetime.datetime.strftime(
+                datetime.datetime.now(),
+                '%Y%m%d%H%M%S',
+            )
+            msg['receivedTime'] = ts
+            # save the message
+            save_msg(msg)
+            if data_purpose=='STORE':
+                json_logger.info('"rest":"Save message - %s"'%(str(msg)))
+                continue
+
+            # validate received data
             try:
                 data_dict = eval(msg['data'])
             except:
