@@ -60,6 +60,9 @@ def export_pdfs(report_type, base_dir):
         if 'name' in user_data and user_data['name']:
             user_vals.append(user_data['name'])
 
+        # remove blanks
+        user_vals = [item.replace(' ', '-') for item in user_vals]
+
         prefix_ = 'report_'+ticket_id+'_'
         for pf in pdf_list:
             if pf.startswith(prefix_):
