@@ -62,7 +62,7 @@ def export_pdfs(report_type, base_dir):
 
         prefix_ = 'report_'+ticket_id+'_'
         for pf in pdf_list:
-            if pf.startswith(pf):
+            if pf.startswith(prefix_):
                 ts = pf.split('.')[0].split('_')[-1]
                 efile = os.path.join(export_dir,'_'.join(user_vals+[ts])+'.pdf')
                 sfile = os.path.join(pdf_dir, pf)
