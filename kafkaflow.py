@@ -324,7 +324,16 @@ def save_msg(msg):
     if not os.path.exists(data_dir):
         os.makedirs(data_dir, mode=0o755)
 
-    data_file = os.path.join(data_dir, 'msgs.txt')
+    # save messages into file
+    msg_datetime = datetime.datetime.strptime(
+        msg['receivedTime'],
+        '%Y%m%d%H%M%S',
+    )
+    last_monday = msg_datetime - datetime.timedelta(days=msg_datetime.weekday())
+    data_file = os.path.join(
+        data_dir,
+        'msgs_%s-%02d-%02d.txt'%(last_monday.year, last_monday.month, last_monday.day),
+    )
     with open(data_file, 'a+') as f:
         f.write(str(msg)+'\n')
 
