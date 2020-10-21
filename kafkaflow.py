@@ -415,6 +415,7 @@ if __name__ == '__main__':
 
             if not msg['reportType']:
                 json_logger.info('"rest": "Get unrelated message - %s"'%(str(msg)))
+                continue
 
             # get report type and the data purpose
             if '|' in msg['reportType']:

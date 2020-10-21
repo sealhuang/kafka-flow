@@ -18,38 +18,6 @@ from kafka import KafkaConsumer, KafkaProducer
 from kafka.errors import KafkaError, KafkaTimeoutError
 
 
-class TimedRotatingCompressedFileHandler(TimedRotatingFileHandler):
-    """Extended version of TimedRotatingFileHandler that compress 
-    logs on rollover.
-    """
-    def __init__(self, filename='', when='W6', interval=1,
-                 backup_count=50, encoding='utf-8'):
-        super(TimedRotatingCompressedFileHandler, self).__init__(
-            filename=filename,
-            when=when,
-            interval=int(interval),
-            backupCount=int(backup_count),
-            encoding=encoding,
-        )
-
-    def doRollover(self):
-        super(TimedRotatingCompressedFileHandler, self).doRollover()
-        log_dir = os.path.dirname(self.baseFilename)
-        to_compress = [
-            os.path.join(log_dir, f) for f in os.listdir(log_dir)
-            if f.startswith(
-                os.path.basename(os.path.splitext(self.baseFilename)[0])
-            ) and not f.endswith(('.gz', '.json'))
-        ]
-        for f in to_compress:
-            if os.path.exists(f):
-                with open(f, 'rb') as _old, gzip.open(f+'.gz', 'wb') as _new:
-                    shutil.copyfileobj(_old, _new)
-                os.remove(f)
-
-
-
-
 def get_report_gallery(config_file='./report_gallery.config'):
     """Read report gallery config file."""
     config = ConfigParser()
@@ -70,7 +38,7 @@ def conn2aliyun(envs):
 
     return bucket
 
-def generate_report(user_id, report_type, out_queue, data_dict=None,
+def generate_report(user_id, report_type,
                     bucket=None, base_url=None, dummy_base_url=None):
     """Workflow for generating report."""
     # init return message
@@ -84,12 +52,9 @@ def generate_report(user_id, report_type, out_queue, data_dict=None,
 
     if report_type not in report_gallery:
         uploaded_msg['status'] = 'error'
-        uploaded_msg['args'] = ''
-        uploaded_msg['stderr'] = ''
         uploaded_msg['detail'] = 'Not find report type.'
-        out_queue.put(json.dumps(uploaded_msg))
         print('Error! Not find report type named %s'%(report_type))
-        return None
+        return uploaded_msg
 
     report_cfg = report_gallery[report_type]
 
@@ -107,11 +72,7 @@ def generate_report(user_id, report_type, out_queue, data_dict=None,
     img_dir = os.path.join(base_dir, 'imgs')
 
     # save input data as json file
-    json_file = None
-    if isinstance(data_dict, dict):
-        json_file = os.path.join(base_dir, '%s_data.json'%(user_id))
-        with open(json_file, 'w') as jf:
-            jf.write(json.dumps(data_dict)+'\n')
+    json_file = os.path.join(base_dir, '%s_data.json'%(user_id))
 
     # run ipynb file
     ipynb_name = report_cfg['entry']
@@ -139,13 +100,12 @@ def generate_report(user_id, report_type, out_queue, data_dict=None,
         uploaded_msg['status'] = 'error'
         uploaded_msg['args'] = ret.args
         uploaded_msg['stderr'] = ret.stderr
-        out_queue.put(json.dumps(uploaded_msg))
         #print('Error in nbconvert stage!')
         # clean img dir
         user_img_dir = os.path.join(img_dir, user_id)
         if os.path.exists(user_img_dir):
             shutil.rmtree(user_img_dir)
-        return None
+        return uploaded_msg
 
     # convert html file to standard format
     if eval(report_cfg['add_heading_number']):
@@ -179,9 +139,8 @@ def generate_report(user_id, report_type, out_queue, data_dict=None,
         uploaded_msg['status'] = 'error'
         uploaded_msg['args'] = ret.args
         uploaded_msg['stderr'] = ret.stderr
-        out_queue.put(json.dumps(uploaded_msg))
         #print('Error in trans2std stage!')
-        return None
+        return uploaded_msg
 
     # convert html to pdf
     ts = datetime.datetime.strftime(
@@ -197,13 +156,12 @@ def generate_report(user_id, report_type, out_queue, data_dict=None,
         uploaded_msg['status'] = 'error'
         uploaded_msg['args'] = ret.args
         uploaded_msg['stderr'] = ret.stderr
-        out_queue.put(json.dumps(uploaded_msg))
         #print('Error in weasyprint stage!')
         # clean img dir
         user_img_dir = os.path.join(img_dir, user_id)
         if os.path.exists(user_img_dir):
             shutil.rmtree(user_img_dir)
-        return None
+        return uploaded_msg
 
     # clean
     if isinstance(json_file, str):
@@ -224,12 +182,11 @@ def generate_report(user_id, report_type, out_queue, data_dict=None,
         uploaded_msg['status'] = 'ok'
         dummy_remote_url = 'https://'+dummy_base_url+'/'+remote_file
         uploaded_msg['urls'] = {report_type: dummy_remote_url}
-        out_queue.put(json.dumps(uploaded_msg))
     else:
         uploaded_msg['status'] = 'error'
         uploaded_msg['args'] = 'Uploads to oss.'
         uploaded_msg['stderr'] = 'Falied to upload pdf file.'
-        out_queue.put(json.dumps(uploaded_msg))
+    return uploaded_msg
 
 def upload_file(bucket, base_url, src_file, remote_file):
     """Upload files to aliyun oss.
@@ -255,65 +212,12 @@ def upload_file(bucket, base_url, src_file, remote_file):
         print('%s error while uploading file %s'%(rsp.status, src_file))
         return None
 
-def save_msg(msg):
-    """Save message."""
-    # init message warehouse dir
-    data_dir = os.path.join(os.path.curdir, 'msg_pool')
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir, mode=0o755)
-
-    # save messages into file
-    msg_datetime = datetime.datetime.strptime(
-        msg['receivedTime'],
-        '%Y%m%d%H%M%S',
-    )
-    last_monday = msg_datetime - datetime.timedelta(days=msg_datetime.weekday())
-    data_file = os.path.join(
-        data_dir,
-        'msgs_%s-%02d-%02d.txt'%(last_monday.year, last_monday.month, last_monday.day),
-    )
-    with open(data_file, 'a+') as f:
-        f.write(str(msg)+'\n')
-
-
-def queue_writer(q):
-    """For test."""
-    for i in range(10):
-        time.sleep(random.random() * 10)
-        flag = random.randint(1, 51)
-        if flag>28:
-            msg = {
-                'reportType': 'mathDiagnosisK8_v1',
-                'data': '',
-            }
-        else:
-            msg = {
-                'reportType': 'mathDiagnosisK8_v1',
-                'data': {
-                    'ticketID': '00'+str(i),
-                    'var1': 1,
-                    'var2': 2,
-                },
-            }
-        q.put(json.dumps(msg))
-
 
 if __name__ == '__main__':
-    # config vars
-    local_msg_file = r'/home/huanglj/selected_messages.txt'
-    export2oss = False
-    mp_worker_num = 4
-
-    # local local messages
-    raw_msgs = open(local_msg_file).readlines()
-    raw_msgs = [line.strip() for line in raw_msgs]
-    local_msgs = [eval(item) for item in raw_msgs]
-
     # read configs
     envs = ConfigParser()
     envs.read('./env.config')
 
-    # init kafka sender
     kafka_sender = KafkaProducer(
         sasl_mechanism = envs['kafka']['sasl_mechanism'],
         security_protocol = envs['kafka']['security_protocol'],
@@ -332,69 +236,32 @@ if __name__ == '__main__':
     ])
     dummy_base_url = envs['aliyun']['dummy_oss_url']
 
-    # create data queue for multiprocessing
-    data_manager = multiprocessing.Manager()
-    out_queue = data_manager.Queue(len(local_msgs))
-
-    # Create multiprocessing pool to process data
-    pool = multiprocessing.Pool(mp_worker_num)
-
     # generate report
-    for msg in local_msgs:
-        #print(msg)
-        # check the data validation
-        if not msg['data']:
-            print('Not find data in message %s.'%(str(msg)))
-            continue
+    user_id = '5f34e34fabebfe6f71525975'
+    report_type = 'mathDiagnosisK8_v1'
+    msg = generate_report(
+        user_id,
+        report_type,
+        bucket=bucket,
+        base_url=base_url,
+        dummy_base_url=dummy_base_url,
+    )
 
-        if not msg['reportType']:
-            print('Get unrelated message - %s'%(str(msg)))
-            continue
 
-        report_type = msg['reportType']
+    if msg['status']=='ok':
+        try:
+            future = kafka_sender.send(envs['kafka']['send_topic'], msg)
+            record_metadata = future.get(timeout=30)
+            assert future.succeeded()
+        except KafkaTimeoutError as kte:
+            print('"Timeout while sending kafka message - %s"'%(str(msg)))
+        except KafkaError as ke:
+            print('"KafkaError while sending kafka message - %s"'%(str(msg)))
+        except:
+            print('"Exception while sending kafka message - %s"'%(str(msg)))
+        else:
+            print('"Generate report successfully - %s"'%(str(msg)))
 
-        # if we get a test message
-        if report_type=='test':
-            print('Get test message - %s'%(str(msg)))
-            continue
-
-        data_dict = msg['data']
-        pool.apply_async(
-            generate_report,
-            (
-                data_dict['ticketID'],
-                msg['reportType'],
-                out_queue,
-            ),
-            {
-                'data_dict': data_dict,
-                'bucket': bucket,
-                'base_url': base_url,
-                'dummy_base_url': dummy_base_url,
-            },
-        )
-
-    while True:
-        if not out_queue.empty():
-            msg = out_queue.get()
-            msg = json.loads(msg)
-            #print(msg)
-            if msg['status']=='ok' and export2oss:
-                try:
-                    future = kafka_sender.send(envs['kafka']['send_topic'], msg)
-                    record_metadata = future.get(timeout=30)
-                    assert future.succeeded()
-                except KafkaTimeoutError as kte:
-                    print('Timeout while sending kafka message - %s'%(str(msg)))
-                except KafkaError as ke:
-                    print('KafkaError while sending kafka message - %s'%(str(msg)))
-                except:
-                    print('Exception while sending kafka message - %s'%(str(msg)))
-                else:
-                    print('Sending good report message successfully.')
-            elif msg['status']=='ok':
-                print('Generating report successfully - %s'%(str(msg)))
-            else:
-                print(str(msg['args']))
-                print(str(msg['stderr']))
+    else:
+        print(msg)
 
