@@ -404,6 +404,7 @@ if __name__ == '__main__':
     data_manager = multiprocessing.Manager()
     in_queue = data_manager.Queue(int(envs['general']['in_queue_size']))
     out_queue = data_manager.Queue(int(envs['general']['out_queue_size']))
+    cache_queue = data_manager.Queue(int(envs['general']['cache_queue_size']))
 
     kafka_sender = KafkaProducer(
         sasl_mechanism = envs['kafka']['sasl_mechanism'],
@@ -436,82 +437,37 @@ if __name__ == '__main__':
     json_logger = get_json_logger()
 
     # generate report
+    cache_max_time = int(envs['general']['cache_max_time'])
+    last_time = time.time()
     while True:
         on_duty = False
-        if not in_queue.empty():
-            raw_msg = in_queue.get()
-            msg = json.loads(raw_msg)
-            #print(msg)
-            # check the data validation
-            if not msg['data']:
-                json_logger.info('"rest":"No data found in %s"'%(str(msg)))
-                #print('Not find data in message.')
-                continue
 
-            if not msg['reportType']:
-                json_logger.info('"rest": "Get unrelated message - %s"'%(str(msg)))
-                continue
+        # save messages to db or file
+        if cache_queue.full() or ((time.time() - last_time) > cache_max_time):
+            if not cache_queue.empty():
+                msg_list = []
+                while not cache_queue.empty():
+                    msg_list.append(cache_queue.get())
+                save_ret = save_msg(msg_list, envs['mongodb'])
+                # TODO
+                #if data_purpose=='STORE' and save_ret:
+                #    json_logger.info('"rest":"Save message - %s"'%(str(msg)))
+                #    continue
+                #elif data_purpose=='STORE' and not save_ret:
+                #    json_logger.error(
+                #        '"rest":"Error while save message - %s"'%(str(msg))
+                #    )
+                #    continue
+                #elif not save_ret:
+                #    json_logger.error(
+                #        '"rest":"Error while save message - %s"'%(str(msg))
+                #    )
 
-            # get report type and the data purpose
-            if '|' in msg['reportType']:
-                report_type, data_purpose = msg['reportType'].split('|')
-            else:
-                report_type = msg['reportType']
-                data_purpose = 'REPORT'
-
-            # if we get a test message
-            if report_type=='test':
-                json_logger.info('"rest":"Get test message - %s"'%(str(msg)))
-                continue
-
-            # normalize message structure
-            msg['reportType'] = report_type
-            msg['reportProcessStatus'] = data_purpose
-            ts = datetime.datetime.strftime(
-                datetime.datetime.now(),
-                '%Y%m%d%H%M%S',
-            )
-            msg['receivedTime'] = ts
-            # save the message
-            save_ret = save_msg(msg, envs['mongodb'])
-            if data_purpose=='STORE' and save_ret:
-                json_logger.info('"rest":"Save message - %s"'%(str(msg)))
-                continue
-            elif data_purpose=='STORE' and not save_ret:
-                json_logger.error(
-                    '"rest":"Error while save message - %s"'%(str(msg))
-                )
-                continue
-            elif not save_ret:
-                json_logger.error(
-                    '"rest":"Error while save message - %s"'%(str(msg))
-                )
-
-            # validate received data
-            try:
-                data_dict = eval(msg['data'])
-            except:
-                json_logger.error('"rest":"Get invalid data - %s"'%(str(msg)))
-                continue
-
-            #data_dict = msg['data']
-            pool.apply_async(
-                generate_report,
-                (
-                    data_dict['ticketID'],
-                    msg['reportType'],
-                    out_queue,
-                ),
-                {
-                    'data_dict': data_dict,
-                    'bucket': bucket,
-                    'base_url': base_url,
-                    'dummy_base_url': dummy_base_url,
-                },
-            )
+            last_time = time.time()
 
             on_duty = True
 
+        # handle process results
         if not out_queue.empty():
             msg = out_queue.get()
             msg = json.loads(msg)
@@ -554,6 +510,74 @@ if __name__ == '__main__':
                 print(msg['args'])
                 print('Err:')
                 print(msg['stderr'])
+
+            on_duty = True
+
+        # process new message
+        if not in_queue.empty():
+            raw_msg = in_queue.get()
+            msg = json.loads(raw_msg)
+            #print(msg)
+            # check the data validation
+            if not msg['data']:
+                json_logger.info('"rest":"No data found in %s"'%(str(msg)))
+                #print('Not find data in message.')
+                continue
+
+            if not msg['reportType']:
+                json_logger.info(
+                    '"rest": "Get unrelated message - %s"'%(str(msg))
+                )
+                continue
+
+            # get report type and the data purpose
+            if '|' in msg['reportType']:
+                report_type, data_purpose = msg['reportType'].split('|')
+            else:
+                report_type = msg['reportType']
+                data_purpose = 'REPORT'
+
+            # if we get a test message
+            if report_type=='test':
+                json_logger.info('"rest":"Get test message - %s"'%(str(msg)))
+                continue
+
+            # normalize message structure
+            msg['reportType'] = report_type
+            msg['reportProcessStatus'] = data_purpose
+            ts = datetime.datetime.strftime(
+                datetime.datetime.now(),
+                '%Y%m%d%H%M%S',
+            )
+            msg['receivedTime'] = ts
+
+            # save the message
+            cache_queue.put(msg)
+            if data_purpose=='STORE':
+                continue
+
+            # validate received data
+            try:
+                data_dict = eval(msg['data'])
+            except:
+                json_logger.error('"rest":"Get invalid data - %s"'%(str(msg)))
+                continue
+
+            #data_dict = msg['data']
+            pool.apply_async(
+                generate_report,
+                (
+                    data_dict['ticketID'],
+                    msg['reportType'],
+                    out_queue,
+                ),
+                {
+                    'data_dict': data_dict,
+                    'bucket': bucket,
+                    'base_url': base_url,
+                    'dummy_base_url': dummy_base_url,
+                },
+            )
 
             on_duty = True
 
