@@ -12,6 +12,9 @@ import subprocess
 import multiprocessing
 from configparser import ConfigParser
 from logging.handlers import TimedRotatingFileHandler
+import pymongo
+from urllib.parse import quote_plus
+import bson
 
 import oss2
 from kafka import KafkaConsumer, KafkaProducer
@@ -317,25 +320,57 @@ def upload_file(bucket, base_url, src_file, remote_file):
         print('%s error while uploading file %s'%(rsp.status, src_file))
         return None
 
-def save_msg(msg):
+def save_msg(msg, db_config):
     """Save message."""
-    # init message warehouse dir
-    data_dir = os.path.join(os.path.curdir, 'msg_pool')
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir, mode=0o755)
+    if db_config.getboolean('msg2db'):
+        try:
+            # normalize data
+            nmsg = dict(msg)
+            nmsg['receivedTime'] = int(nmsg['receivedTime'])
+            nmsg['data'] = eval(nmsg['data'])
+            # connect to db
+            uri = "mongodb://%s:%s@%s" % (
+                quote_plus(db_config.get('db_user')),
+                quote_plus(db_config.get('db_pwd')),
+                db_config.get('db_url'),
+            )
+            myclient = pymongo.MongoClient(
+                host=uri,
+                port=db_config.getint('db_port'),
+            )
+            # locate db and collection
+            db = myclient[db_config.get('db_name')]
+            msgs_col = db[db_config.get('collection_name')]
+            result = msgs_col.insert_one(nmsg)
+            if isinstance(result.inserted_id, bson.ObjectId):
+                return True
+            else:
+                return False
+        except:
+            return False
 
-    # save messages into file
-    msg_datetime = datetime.datetime.strptime(
-        msg['receivedTime'],
-        '%Y%m%d%H%M%S',
-    )
-    last_monday = msg_datetime - datetime.timedelta(days=msg_datetime.weekday())
-    data_file = os.path.join(
-        data_dir,
-        'msgs_%s-%02d-%02d.txt'%(last_monday.year, last_monday.month, last_monday.day),
-    )
-    with open(data_file, 'a+') as f:
-        f.write(str(msg)+'\n')
+    else:
+        # init message warehouse dir
+        data_dir = os.path.join(os.path.curdir, 'msg_pool')
+        if not os.path.exists(data_dir):
+            os.makedirs(data_dir, mode=0o755)
+
+        # save messages into file
+        msg_datetime = datetime.datetime.strptime(
+            msg['receivedTime'],
+            '%Y%m%d%H%M%S',
+        )
+        last_monday = msg_datetime - datetime.timedelta(days=msg_datetime.weekday())
+        data_file = os.path.join(
+            data_dir,
+            'msgs_%s-%02d-%02d.txt'%(last_monday.year, last_monday.month, last_monday.day),
+        )
+        try:
+            with open(data_file, 'a+') as f:
+                f.write(str(msg)+'\n')
+            return True
+        except:
+            return False
 
 
 def queue_writer(q):
@@ -438,10 +473,19 @@ if __name__ == '__main__':
             )
             msg['receivedTime'] = ts
             # save the message
-            save_msg(msg)
-            if data_purpose=='STORE':
+            save_ret = save_msg(msg, envs['mongodb'])
+            if data_purpose=='STORE' and save_ret:
                 json_logger.info('"rest":"Save message - %s"'%(str(msg)))
                 continue
+            elif data_purpose=='STORE' and not save_ret:
+                json_logger.error(
+                    '"rest":"Error while save message - %s"'%(str(msg))
+                )
+                continue
+            elif not save_ret:
+                json_logger.error(
+                    '"rest":"Error while save message - %s"'%(str(msg))
+                )
 
             # validate received data
             try:
