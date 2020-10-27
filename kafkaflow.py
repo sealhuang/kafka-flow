@@ -354,22 +354,26 @@ def save_msgs(msg_list, db_config):
             return 'msg2db_ok'
 
     if (not db_config.getboolean('msg2db')) or insert2db_err:
-        # init message dir
-        data_dir = os.path.join(os.path.curdir, 'msg_pool')
-        if not os.path.exists(data_dir):
-            os.makedirs(data_dir, mode=0o755)
-
-        # save messages into file
-        msg_datetime = datetime.datetime.strptime(
-            msg['receivedTime'],
-            '%Y%m%d%H%M%S',
-        )
-        last_monday = msg_datetime - datetime.timedelta(days=msg_datetime.weekday())
-        data_file = os.path.join(
-            data_dir,
-            'msgs_%s-%02d-%02d.txt'%(last_monday.year, last_monday.month, last_monday.day),
-        )
         try:
+            # init message dir
+            data_dir = os.path.join(os.path.curdir, 'msg_pool')
+            if not os.path.exists(data_dir):
+                os.makedirs(data_dir, mode=0o755)
+
+            # save messages into file
+            msg_dt = datetime.datetime.strptime(
+                msg_list[0]['receivedTime'],
+                '%Y%m%d%H%M%S',
+            )
+            last_monday = msg_dt - datetime.timedelta(days=msg_dt.weekday())
+            data_file = os.path.join(
+                data_dir,
+                'msgs_%s-%02d-%02d.txt'%(
+                    last_monday.year,
+                    last_monday.month,
+                    last_monday.day,
+                ),
+            )
             with open(data_file, 'a+') as f:
                 for msg in msg_list:
                     f.write(str(msg)+'\n')
@@ -463,9 +467,9 @@ if __name__ == '__main__':
                 elif save_ret=='msg2file_ok':
                     json_logger.info('"rest":"Save msgs to file successfully"')
                 elif save_ret=='msg2db_err':
-                    json_logger.error('"rest":"Error while save msgs to db"'))
+                    json_logger.error('"rest":"Error while save msgs to db"')
                 elif save_ret=='msg2file_err':
-                    json_logger.error('"rest":"Error while save msgs to file"'))
+                    json_logger.error('"rest":"Error while save msgs to file"')
 
             last_time = time.time()
             on_duty = True
