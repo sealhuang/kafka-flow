@@ -73,20 +73,72 @@ def export_pdfs(report_type, base_dir):
                 #print(cmd_str)
                 os.system(cmd_str)
 
+def export_pdfs_1(base_dir, ticket_id, new_pdf):
+    """Export and rename pdf files."""
+    # pdf dir
+    pdf_dir = os.path.join(base_dir, 'pdfs')
+    if not os.path.exists(pdf_dir):
+        print('The directory `%s/pdfs` does not exists.'%(report_type))
+        return None
+
+    # get pdf files
+    pdf_list = os.listdir(pdf_dir)
+
+    prefix_ = 'report_'+ticket_id+'_'
+    for pf in pdf_list:
+        if pf.startswith(prefix_):
+            ts = pf.split('.')[0].split('_')[-1]
+            efile = new_pdf+'_'+ts+'.pdf'
+            sfile = os.path.join(pdf_dir, pf)
+            cmd_str = 'cp %s %s'%(sfile, efile)
+            #print(cmd_str)
+            os.system(cmd_str)
+
 
 if __name__ == '__main__':
-    # user input
-    report_type = 'mathDiagnosisK8_v1'
-
     # get report config info
     report_config_file = os.path.join(os.path.curdir, 'report_gallery.config')
     report_gallery = get_report_gallery(report_config_file)
 
-    if report_type not in report_gallery:
-        print('Error! Not find report type named %s.'%(report_type))
-    else:
-        report_cfg = report_gallery[report_type]
+    #-- report-type based
+    ## user input
+    #report_type = 'mathDiagnosisK8_v1'
 
-        # rename and export pdf files 
-        export_pdfs(report_type, report_cfg['base_dir'])
+    #if report_type not in report_gallery:
+    #    print('Error! Not find report type named %s.'%(report_type))
+    #else:
+    #    report_cfg = report_gallery[report_type]
+
+    #    # rename and export pdf files 
+    #    export_pdfs(report_type, report_cfg['base_dir'])
+
+    #-- local-file based
+    local_dir = os.path.join(os.path.curdir, 'local_msgs', 'baxueyuan_20201027')
+    export_dir = os.path.join(local_dir, 'exports')
+    if not os.path.exists(export_dir):
+        os.makedirs(export_dir, mode=0o755)
+
+    user_info_file = os.path.join(local_dir, 'user_info.csv')
+    user_info = open(user_info_file).readlines()
+    user_info = [line.strip().split(',') for line in user_info]
+    for line in user_info:
+        report_type = line[0]
+        ticket_id = line[1]
+        user_school = line[2].replace(' ', '')
+        user_grade = line[3].replace(' ', '')
+        user_class = line[4].replace(' ', '')
+        user_name = line[5].replace(' ', '')
+        new_pdf = os.path.join(
+            export_dir,
+            '%s_%s_%s_%s'%(user_school, user_grade, user_class, user_name),
+        )
+
+        if report_type not in report_gallery:
+            print('Error! Not find report type named %s.'%(report_type))
+        else:
+            report_cfg = report_gallery[report_type]
+
+            # rename and export pdf files
+            export_pdfs_1(report_cfg['base_dir'], ticket_id, new_pdf)
+
 
