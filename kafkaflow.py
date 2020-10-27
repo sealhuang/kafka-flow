@@ -59,16 +59,16 @@ class KafkaReceiver(multiprocessing.Process):
         multiprocessing.Process.__init__(self)
 
         self.consumer = KafkaConsumer(
-            envs['rec_topic'],
-            group_id = envs['rec_grp'],
+            envs.get('rec_topic'),
+            group_id = envs.get('rec_grp'),
             # enable_auto_commit=True,
             # auto_commit_interval_ms=2,
-            sasl_mechanism = envs['sasl_mechanism'],
-            security_protocol = envs['security_protocol'],
-            sasl_plain_username = envs['user'],
-            sasl_plain_password = envs['pwd'],
-            bootstrap_servers = [envs['bootstrap_servers']],
-            auto_offset_reset = envs['auto_offset_rst'],
+            sasl_mechanism = envs.get('sasl_mechanism'),
+            security_protocol = envs.get('security_protocol'),
+            sasl_plain_username = envs.get('user'),
+            sasl_plain_password = envs.get('pwd'),
+            bootstrap_servers = [envs.get('bootstrap_servers')],
+            auto_offset_reset = envs.get('auto_offset_rst'),
         )
 
         self.queue = queue
@@ -125,12 +125,12 @@ def get_report_gallery(config_file='./report_gallery.config'):
 def conn2aliyun(envs):
     """Connect to aliyun."""
     # aliyun oss auth
-    auth = oss2.Auth(envs['access_id'], envs['access_secret'])
+    auth = oss2.Auth(envs.get('access_id'), envs.get('access_secret'))
     # get oss bucket
     bucket = oss2.Bucket(
         auth,
-        envs['oss_endpoint_name'],
-        envs['oss_bucket_name'],
+        envs.get('oss_endpoint_name'),
+        envs.get('oss_bucket_name'),
     )
 
     return bucket
@@ -320,14 +320,18 @@ def upload_file(bucket, base_url, src_file, remote_file):
         print('%s error while uploading file %s'%(rsp.status, src_file))
         return None
 
-def save_msg(msg, db_config):
+def save_msgs(msg_list, db_config):
     """Save message."""
+    insert2db_err = False
+
     if db_config.getboolean('msg2db'):
         try:
             # normalize data
-            nmsg = dict(msg)
-            nmsg['receivedTime'] = int(nmsg['receivedTime'])
-            nmsg['data'] = eval(nmsg['data'])
+            nmsgs = [dict(msg) for msg in msg_list]
+            for item in nmsgs:
+                item['receivedTime'] = int(item['receivedTime'])
+                item['data'] = eval(item['data'])
+
             # connect to db
             uri = "mongodb://%s:%s@%s" % (
                 quote_plus(db_config.get('db_user')),
@@ -338,19 +342,19 @@ def save_msg(msg, db_config):
                 host=uri,
                 port=db_config.getint('db_port'),
             )
+
             # locate db and collection
             db = myclient[db_config.get('db_name')]
             msgs_col = db[db_config.get('collection_name')]
-            result = msgs_col.insert_one(nmsg)
-            if isinstance(result.inserted_id, bson.ObjectId):
-                return True
-            else:
-                return False
+            ret = msgs_col.insert_many(nmsgs)
+            assert len(ret.inserted_ids)==len(nmsgs)
         except:
-            return False
+            insert2db_err = True
+        else:
+            return 'msg2db_ok'
 
-    else:
-        # init message warehouse dir
+    if (not db_config.getboolean('msg2db')) or insert2db_err:
+        # init message dir
         data_dir = os.path.join(os.path.curdir, 'msg_pool')
         if not os.path.exists(data_dir):
             os.makedirs(data_dir, mode=0o755)
@@ -367,10 +371,15 @@ def save_msg(msg, db_config):
         )
         try:
             with open(data_file, 'a+') as f:
-                f.write(str(msg)+'\n')
-            return True
+                for msg in msg_list:
+                    f.write(str(msg)+'\n')
         except:
-            return False
+            return 'msg2file_err'
+        else:
+            if insert2db_err:
+                return 'msg2db_err'
+            else:
+                return 'msg2file_ok'
 
 
 def queue_writer(q):
@@ -402,16 +411,16 @@ if __name__ == '__main__':
 
     # create data queue for multiprocessing
     data_manager = multiprocessing.Manager()
-    in_queue = data_manager.Queue(int(envs['general']['in_queue_size']))
-    out_queue = data_manager.Queue(int(envs['general']['out_queue_size']))
-    cache_queue = data_manager.Queue(int(envs['general']['cache_queue_size']))
+    in_queue = data_manager.Queue(envs.getint('general', 'in_queue_size'))
+    out_queue = data_manager.Queue(envs.getint('general', 'out_queue_size'))
+    cache_queue = data_manager.Queue(envs.getint('general', 'cache_queue_size'))
 
     kafka_sender = KafkaProducer(
-        sasl_mechanism = envs['kafka']['sasl_mechanism'],
-        security_protocol = envs['kafka']['security_protocol'],
-        sasl_plain_username = envs['kafka']['user'],
-        sasl_plain_password = envs['kafka']['pwd'],
-        bootstrap_servers = [envs['kafka']['bootstrap_servers']],
+        sasl_mechanism = envs.get('kafka', 'sasl_mechanism'),
+        security_protocol = envs.get('kafka', 'security_protocol'),
+        sasl_plain_username = envs.get('kafka', 'user'),
+        sasl_plain_password = envs.get('kafka', 'pwd'),
+        bootstrap_servers = [envs.get('kafka', 'bootstrap_servers')],
         value_serializer = lambda v: json.dumps(v).encode('utf-8'),
         retries = 5,
     )
@@ -425,19 +434,19 @@ if __name__ == '__main__':
     # connect to aliyun oss
     bucket = conn2aliyun(envs['aliyun'])
     base_url = '.'.join([
-        envs['aliyun']['oss_bucket_name'],
-        envs['aliyun']['oss_endpoint_name'],
+        envs.get('aliyun', 'oss_bucket_name'),
+        envs.get('aliyun', 'oss_endpoint_name'),
     ])
-    dummy_base_url = envs['aliyun']['dummy_oss_url']
+    dummy_base_url = envs.get('aliyun', 'dummy_oss_url')
 
     # Create multiprocessing pool to process data
-    pool = multiprocessing.Pool(int(envs['general']['mp_worker_num']))
+    pool = multiprocessing.Pool(envs.getint('general', 'mp_worker_num'))
 
     # logging
     json_logger = get_json_logger()
 
     # generate report
-    cache_max_time = int(envs['general']['cache_max_time'])
+    cache_max_time = envs.getint('general', 'cache_max_time')
     last_time = time.time()
     while True:
         on_duty = False
@@ -448,23 +457,17 @@ if __name__ == '__main__':
                 msg_list = []
                 while not cache_queue.empty():
                     msg_list.append(cache_queue.get())
-                save_ret = save_msg(msg_list, envs['mongodb'])
-                # TODO
-                #if data_purpose=='STORE' and save_ret:
-                #    json_logger.info('"rest":"Save message - %s"'%(str(msg)))
-                #    continue
-                #elif data_purpose=='STORE' and not save_ret:
-                #    json_logger.error(
-                #        '"rest":"Error while save message - %s"'%(str(msg))
-                #    )
-                #    continue
-                #elif not save_ret:
-                #    json_logger.error(
-                #        '"rest":"Error while save message - %s"'%(str(msg))
-                #    )
+                save_ret = save_msgs(msg_list, envs['mongodb'])
+                if save_ret=='msg2db_ok':
+                    json_logger.info('"rest":"Save msgs to db successfully"')
+                elif save_ret=='msg2file_ok':
+                    json_logger.info('"rest":"Save msgs to file successfully"')
+                elif save_ret=='msg2db_err':
+                    json_logger.error('"rest":"Error while save msgs to db"'))
+                elif save_ret=='msg2file_err':
+                    json_logger.error('"rest":"Error while save msgs to file"'))
 
             last_time = time.time()
-
             on_duty = True
 
         # handle process results
@@ -474,24 +477,27 @@ if __name__ == '__main__':
             #print(msg)
             if msg['status']=='ok':
                 try:
-                    future = kafka_sender.send(envs['kafka']['send_topic'], msg)
+                    future = kafka_sender.send(
+                        envs.get('kafka', 'send_topic'),
+                        msg,
+                    )
                     record_metadata = future.get(timeout=30)
                     assert future.succeeded()
                 except KafkaTimeoutError as kte:
                     json_logger.error(
-                        '"rest":"Timeout while sending kafka message - %s"'%(str(msg)),
+                        '"rest":"Timeout while sending message - %s"'%(str(msg)),
                         exc_info=True,
                     )
                 except KafkaError as ke:
                     json_logger.error(
-                        '"rest":"KafkaError while sending kafka message - %s"'%(str(msg)),
+                        '"rest":"KafkaError while sending message - %s"'%(str(msg)),
                         exc_info=True,
                     )
                 except:
                     #print('Error!')
                     #print(msg)
                     json_logger.error(
-                        '"rest":"Exception while sending kafka message - %s"'%(str(msg)),
+                        '"rest":"Exception while sending message - %s"'%(str(msg)),
                         exc_info=True,
                     )
                 else:
