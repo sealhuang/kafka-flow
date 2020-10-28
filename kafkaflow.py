@@ -135,9 +135,14 @@ def conn2aliyun(envs):
 
     return bucket
 
-def generate_report(user_id, report_type, out_queue, data_dict=None,
+def generate_report(msg, out_queue, cache_queue,
                     bucket=None, base_url=None, dummy_base_url=None):
     """Workflow for generating report."""
+    # local vars init
+    data_dict = msg['data']
+    user_id = data_dict['ticketID']
+    report_type = msg['reportType']
+
     # init return message
     uploaded_msg = {
         'id': user_id,
@@ -153,6 +158,9 @@ def generate_report(user_id, report_type, out_queue, data_dict=None,
         uploaded_msg['stderr'] = ''
         uploaded_msg['detail'] = 'Not find report type.'
         out_queue.put(json.dumps(uploaded_msg))
+        # add message to cache
+        msg['reportProcessStatus'] = 'ERR'
+        cache_queue.put(msg)
         print('Error! Not find report type named %s'%(report_type))
         return None
 
@@ -205,6 +213,9 @@ def generate_report(user_id, report_type, out_queue, data_dict=None,
         uploaded_msg['args'] = ret.args
         uploaded_msg['stderr'] = ret.stderr
         out_queue.put(json.dumps(uploaded_msg))
+        # add message to cache
+        msg['reportProcessStatus'] = 'ERR'
+        cache_queue.put(msg)
         #print('Error in nbconvert stage!')
         # clean img dir
         user_img_dir = os.path.join(img_dir, user_id)
@@ -245,6 +256,9 @@ def generate_report(user_id, report_type, out_queue, data_dict=None,
         uploaded_msg['args'] = ret.args
         uploaded_msg['stderr'] = ret.stderr
         out_queue.put(json.dumps(uploaded_msg))
+        # add message to cache
+        msg['reportProcessStatus'] = 'ERR'
+        cache_queue.put(msg)
         #print('Error in trans2std stage!')
         return None
 
@@ -263,6 +277,9 @@ def generate_report(user_id, report_type, out_queue, data_dict=None,
         uploaded_msg['args'] = ret.args
         uploaded_msg['stderr'] = ret.stderr
         out_queue.put(json.dumps(uploaded_msg))
+        # add message to cache
+        msg['reportProcessStatus'] = 'ERR'
+        cache_queue.put(msg)
         #print('Error in weasyprint stage!')
         # clean img dir
         user_img_dir = os.path.join(img_dir, user_id)
@@ -290,11 +307,15 @@ def generate_report(user_id, report_type, out_queue, data_dict=None,
         dummy_remote_url = 'https://'+dummy_base_url+'/'+remote_file
         uploaded_msg['urls'] = {report_type: dummy_remote_url}
         out_queue.put(json.dumps(uploaded_msg))
+        # add message to cache
+        cache_queue.put(msg)
     else:
         uploaded_msg['status'] = 'error'
         uploaded_msg['args'] = 'Uploads to oss.'
         uploaded_msg['stderr'] = 'Falied to upload pdf file.'
         out_queue.put(json.dumps(uploaded_msg))
+        msg['reportProcessStatus'] = 'ERR2OSS'
+        cache_queue.put(msg)
 
 def upload_file(bucket, base_url, src_file, remote_file):
     """Upload files to aliyun oss.
@@ -330,7 +351,6 @@ def save_msgs(msg_list, db_config):
             nmsgs = [dict(msg) for msg in msg_list]
             for item in nmsgs:
                 item['receivedTime'] = int(item['receivedTime'])
-                item['data'] = eval(item['data'])
 
             # connect to db
             uri = "mongodb://%s:%s@%s" % (
@@ -562,27 +582,25 @@ if __name__ == '__main__':
             msg['receivedTime'] = ts
 
             # save the message
-            cache_queue.put(msg)
             if data_purpose=='STORE':
+                cache_queue.put(msg)
                 continue
 
             # validate received data
             try:
-                data_dict = eval(msg['data'])
+                msg['data'] = eval(msg['data'])
             except:
                 json_logger.error('"rest":"Get invalid data - %s"'%(str(msg)))
                 continue
 
-            #data_dict = msg['data']
             pool.apply_async(
                 generate_report,
                 (
-                    data_dict['ticketID'],
-                    msg['reportType'],
+                    msg,
                     out_queue,
+                    cache_queue,
                 ),
                 {
-                    'data_dict': data_dict,
                     'bucket': bucket,
                     'base_url': base_url,
                     'dummy_base_url': dummy_base_url,
