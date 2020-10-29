@@ -155,7 +155,7 @@ def generate_report(msg, out_queue, cache_queue,
     if report_type not in report_gallery:
         uploaded_msg['status'] = 'error'
         uploaded_msg['args'] = ''
-        uploaded_msg['stderr'] = ''
+        uploaded_msg['stderr'] = 'Not find report type %s'%(report_type)
         uploaded_msg['detail'] = 'Not find report type.'
         out_queue.put(json.dumps(uploaded_msg))
         # add message to cache
