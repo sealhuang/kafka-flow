@@ -400,7 +400,7 @@ def save_msgs(msg_list, db_config):
                         {'$set': tmp},
                     ))
                 ret = msgs_col.bulk_write(update_cmd)
-                if not len(ret.matched_count)==len(update_list):
+                if not ret.modified_count==len(update_list):
                     err_list.extend(update_list)
 
             assert len(err_list)==0
