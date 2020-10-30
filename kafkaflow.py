@@ -572,6 +572,13 @@ if __name__ == '__main__':
                 json_logger.info('"rest":"Get test message - %s"'%(str(msg)))
                 continue
 
+            # validate received data
+            try:
+                msg['data'] = eval(msg['data'])
+            except:
+                json_logger.error('"rest":"Get invalid data - %s"'%(str(msg)))
+                continue
+
             # normalize message structure
             msg['reportType'] = report_type
             msg['reportProcessStatus'] = data_purpose
@@ -584,13 +591,6 @@ if __name__ == '__main__':
             # save the message
             if data_purpose=='STORE':
                 cache_queue.put(msg)
-                continue
-
-            # validate received data
-            try:
-                msg['data'] = eval(msg['data'])
-            except:
-                json_logger.error('"rest":"Get invalid data - %s"'%(str(msg)))
                 continue
 
             pool.apply_async(
