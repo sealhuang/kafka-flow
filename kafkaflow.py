@@ -349,11 +349,6 @@ def save_msgs(msg_list, db_config):
 
     if db_config.getboolean('msg2db'):
         try:
-            # normalize data
-            nmsgs = [dict(msg) for msg in msg_list]
-            for item in nmsgs:
-                item['receivedTime'] = int(item['receivedTime'])
-
             # connect to db
             uri = "mongodb://%s:%s@%s" % (
                 quote_plus(db_config.get('db_user')),
@@ -371,7 +366,12 @@ def save_msgs(msg_list, db_config):
 
             # classify messasges into different groups based their source
             # insert new messages
-            insert_list = [item for item in nmsgs if 'fromdb' not in item]
+            insert_list = [
+                dict(item) for item in msg_list if 'fromdb' not in item
+            ]
+            for item in insert_list:
+                item['receivedTime'] = int(item['receivedTime'])
+
             if len(insert_list):
                 for item in insert_list:
                     item['fromdb'] = db_config.get('collection_name')
@@ -380,10 +380,11 @@ def save_msgs(msg_list, db_config):
                     for item in insert_list:
                         item.pop('fromdb')
                     err_list.extend(insert_list)
+
             # update exist messages in db
             update_list = [
-                item for item in nmsgs
-                    if ('fromdb' in item) and \
+                item for item in msg_list
+                    if ('db_id' in item) and \
                     item['fromdb']==db_config.get('collection_name')
             ]
             if len(update_list):
