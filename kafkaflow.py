@@ -13,6 +13,7 @@ import multiprocessing
 from configparser import ConfigParser
 from logging.handlers import TimedRotatingFileHandler
 import pymongo
+from pymongo import UpdateOne
 from urllib.parse import quote_plus
 import bson
 
@@ -156,7 +157,6 @@ def generate_report(msg, out_queue, cache_queue,
         uploaded_msg['status'] = 'error'
         uploaded_msg['args'] = ''
         uploaded_msg['stderr'] = 'Not find report type %s'%(report_type)
-        uploaded_msg['detail'] = 'Not find report type.'
         out_queue.put(json.dumps(uploaded_msg))
         # add message to cache
         msg['reportProcessStatus'] = 'ERR'
@@ -308,6 +308,7 @@ def generate_report(msg, out_queue, cache_queue,
         uploaded_msg['urls'] = {report_type: dummy_remote_url}
         out_queue.put(json.dumps(uploaded_msg))
         # add message to cache
+        msg['report_url'] = dummy_remote_url
         cache_queue.put(msg)
     else:
         uploaded_msg['status'] = 'error'
@@ -344,6 +345,7 @@ def upload_file(bucket, base_url, src_file, remote_file):
 def save_msgs(msg_list, db_config):
     """Save message."""
     insert2db_err = False
+    err_list = []
 
     if db_config.getboolean('msg2db'):
         try:
@@ -366,14 +368,52 @@ def save_msgs(msg_list, db_config):
             # locate db and collection
             db = myclient[db_config.get('db_name')]
             msgs_col = db[db_config.get('collection_name')]
-            ret = msgs_col.insert_many(nmsgs)
-            assert len(ret.inserted_ids)==len(nmsgs)
+
+            # classify messasges into different groups based their source
+            # insert new messages
+            insert_list = [item for item in nmsgs if 'fromdb' not in item]
+            if len(insert_list):
+                for item in insert_list:
+                    item['fromdb'] = db_config.get('collection_name')
+                ret = msgs_col.insert_many(insert_list)
+                if not (len(ret.inserted_ids)==len(insert_list)):
+                    for item in insert_list:
+                        item.pop('fromdb')
+                    err_list.extend(insert_list)
+            # update exist messages in db
+            update_list = [
+                item for item in nmsgs
+                    if ('fromdb' in item) and \
+                    item['fromdb']==db_config.get('collection_name')
+            ]
+            if len(update_list):
+                update_cmd = []
+                db_fields = ['reportProcessStatus', 'report_url']
+                for item in update_list:
+                    tmp = {}
+                    for k in db_fields:
+                        if k in item:
+                            tmp[k] = item[k]
+                    update_cmd.append(UpdateOne(
+                        {'_id': bson.ObjectId(item['db_id'])},
+                        {'$set': tmp},
+                    ))
+                ret = msgs_col.bulk_write(update_cmd)
+                if not len(ret.matched_count)==len(update_list):
+                    err_list.extend(update_list)
+
+            assert len(err_list)==0
+                
         except:
+            if len(err_list)==0:
+                err_list = msg_list
             insert2db_err = True
         else:
             return 'msg2db_ok'
 
     if (not db_config.getboolean('msg2db')) or insert2db_err:
+        if insert2db_err:
+            msg_list = err_list
         try:
             # init message dir
             data_dir = os.path.join(os.path.curdir, 'msg_pool')
@@ -548,21 +588,31 @@ if __name__ == '__main__':
             raw_msg = in_queue.get()
             msg = json.loads(raw_msg)
             #print(msg)
-            # check the data validation
+
+            # validate received data
             if not msg['data']:
                 json_logger.info('"rest":"No data found in %s"'%(str(msg)))
                 #print('Not find data in message.')
                 continue
 
+            try:
+                msg['data'] = eval(msg['data'])
+            except:
+                json_logger.error('"rest":"Get invalid data - %s"'%(str(msg)))
+                continue
+
+            # get report type and the data purpose
             if not msg['reportType']:
                 json_logger.info(
                     '"rest": "Get unrelated message - %s"'%(str(msg))
                 )
                 continue
 
-            # get report type and the data purpose
             if '|' in msg['reportType']:
                 report_type, data_purpose = msg['reportType'].split('|')
+            elif 'reportProcessStatus' in msg:
+                report_type = msg['reportType']
+                data_purpose = msg['reportProcessStatus']
             else:
                 report_type = msg['reportType']
                 data_purpose = 'REPORT'
@@ -572,21 +622,15 @@ if __name__ == '__main__':
                 json_logger.info('"rest":"Get test message - %s"'%(str(msg)))
                 continue
 
-            # validate received data
-            try:
-                msg['data'] = eval(msg['data'])
-            except:
-                json_logger.error('"rest":"Get invalid data - %s"'%(str(msg)))
-                continue
-
             # normalize message structure
             msg['reportType'] = report_type
             msg['reportProcessStatus'] = data_purpose
-            ts = datetime.datetime.strftime(
-                datetime.datetime.now(),
-                '%Y%m%d%H%M%S',
-            )
-            msg['receivedTime'] = ts
+            if 'receivedTime' not in msg:
+                ts = datetime.datetime.strftime(
+                    datetime.datetime.now(),
+                    '%Y%m%d%H%M%S',
+                )
+                msg['receivedTime'] = ts
 
             # save the message
             if data_purpose=='STORE':
