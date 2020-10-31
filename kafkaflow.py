@@ -472,7 +472,7 @@ def queue_writer(q):
 if __name__ == '__main__':
     # read configs
     envs = ConfigParser()
-    envs.read('./env.config')
+    envs.read('./.env.config')
 
     # create data queue for multiprocessing
     data_manager = multiprocessing.Manager()
