@@ -389,7 +389,7 @@ def save_msgs(msg_list, db_config):
             ]
             if len(update_list):
                 update_cmd = []
-                db_fields = ['reportProcessStatus', 'report_url']
+                db_fields = ['reportProcessStatus', 'report_url', 'reportType']
                 for item in update_list:
                     tmp = {}
                     for k in db_fields:

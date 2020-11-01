@@ -41,7 +41,7 @@ class ReportQuester():
             retries = 5,
         )
 
-    def send(self, msgs):
+    def send(self, msgs, report_type=None):
         """Send report messages."""
         # get message list
         msg_list = []
@@ -56,6 +56,8 @@ class ReportQuester():
             item['data'] = str(item['data'])
             item['receivedTime'] = str(item['receivedTime'])
             item['reportProcessStatus'] = 'REPORT'
+            if report_type:
+                item['reportType'] = report_type
             item.pop('_id')
 
         # send request
