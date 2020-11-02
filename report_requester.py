@@ -6,16 +6,17 @@ from configparser import ConfigParser
 
 from kafka import KafkaProducer
 from kafka.errors import KafkaError, KafkaTimeoutError
+import oss2
 
 
 class ReportQuester():
     """Report requester for the Sundial-Report-Stream."""
 
-    def __init__(self, env_name, env_config='./report_requester.config'):
+    def __init__(self, env_name, env_cfg_file='./report_requester.config'):
         """Initialize report requester."""
         # read configs
         envs = ConfigParser()
-        envs.read(env_config)
+        envs.read(env_cfg_file)
 
         if env_name=='test':
             bootstrap_servers = [
@@ -78,4 +79,89 @@ class ReportQuester():
             else:
                 print('Send report request for message %s successfully' % (
                     msg['db_id']))
+
+
+def export_reports(msgs, name_fields, export_dir,
+                   env_cfg_file='./report_requester.config'):
+    # check input
+    if not isinstance(name_fields, list):
+        print('Error: `name_fields`should be a list!')
+        return
+
+    # get message list
+    msg_list = []
+    if isinstance(msgs, dict):
+        if ('reportProcessStatus' in msgs) and \
+           (msgs['reportProcessStatus']=='REPORT') and \
+           ('report_url' in msgs):
+            msg_list.append(dict(msgs))
+        else:
+            print('Invalid message for exporting report.')
+            print(msgs)
+            return
+
+    if isinstance(msgs, list):
+        for item in msgs:
+            if ('reportProcessStatus' in item) and \
+               (item['reportProcessStatus']=='REPORT') and \
+               ('report_url' in item):
+                msg_list.append(dict(item))
+            else:
+                print('Invalid message for exporting report.')
+                print(item)
+                return
+
+    # check name fields
+    for item in msg_list:
+        for k in name_fields:
+            if not k in item['data']:
+                print('Data error!')
+                print('field %s does not exist in data'%(k))
+                print(item)
+                return
+
+    # read config
+    envs = ConfigParser()
+    envs.read(env_cfg_file)
+
+    # aliyun oss auth
+    auth = oss2.Auth(
+        envs.get('aliyun', 'access_id'),
+        envs.get('aliyun', 'access_secret'),
+    )
+    # get oss bucket
+    bucket = oss2.Bucket(
+        auth,
+        envs.get('aliyun', 'oss_endpoint_name'),
+        envs.get('aliyun', 'oss_bucket_name'),
+    )
+    # get oss base url
+    dummy_base_url = envs.get('aliyun', 'dummy_oss_url')
+
+    # rename pdfs
+    for item in msg_list:
+        old_url = item['report_url']
+        old_url = old_url[old_url.index(dummy_base_url):]
+        old_addr = '/'.join(old_url.split('/')[1:])
+
+        # generate new file name
+        old_pdf = old_addr.split('/')[-1]
+        time_tag = old_pdf.split('.')[0].split('_')[-1]
+        new_pdf_fields = [item['data'][k] for k in name_fields]
+        new_pdf_fields = [ele for ele in new_pdf_fields if ele]
+        new_pdf_fields.append(time_tag)
+        new_addr = '/'.join([export_dir, '_'.join(new_pdf_fields)+'.pdf'])
+
+        # copy file
+        rsp = bucket.copy_object(
+            envs.get('aliyun', 'oss_bucket_name'),
+            old_addr,
+            new_addr,
+        )
+        if rsp.status==200:
+            print('Export and rename - ok')
+        else:
+            print('Error occurred')
+            print(item)
+            break
 
