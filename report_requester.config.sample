@@ -7,3 +7,9 @@ pwd = USER_PWD
 security_protocol = SASL_PLAINTEXT
 sasl_mechanism = PLAIN
 
+[aliyun]
+access_id = XXXX
+access_secret = XXXX
+oss_endpoint_name = oss-cn-beijing.aliyuncs.com
+oss_bucket_name = XXX
+dummy_oss_url = dummy.url.cn
