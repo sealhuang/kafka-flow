@@ -370,6 +370,10 @@ def save_msgs(msg_list, db_config):
                 dict(item) for item in msg_list if 'fromdb' not in item
             ]
             for item in insert_list:
+                item['receivedTimeFormatted'] = datetime.datetime.strptime(
+                    item['receivedTime'],
+                    '%Y%m%d%H%M%S',
+                )
                 item['receivedTime'] = int(item['receivedTime'])
 
             if len(insert_list):
@@ -379,6 +383,8 @@ def save_msgs(msg_list, db_config):
                 if not (len(ret.inserted_ids)==len(insert_list)):
                     for item in insert_list:
                         item.pop('fromdb')
+                        item.pop('receivedTimeFormatted')
+                        item['receivedTime'] = str(item['receivedTime'])
                     err_list.extend(insert_list)
 
             # update exist messages in db

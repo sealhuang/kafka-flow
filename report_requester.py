@@ -60,6 +60,7 @@ class ReportQuester():
             if report_type:
                 item['reportType'] = report_type
             item.pop('_id')
+            item.pop('receivedTimeFormatted')
 
         # send request
         for msg in msg_list:
