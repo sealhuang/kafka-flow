@@ -136,13 +136,15 @@ def conn2aliyun(envs):
 
     return bucket
 
-def generate_report(msg, out_queue, cache_queue,
-                    bucket=None, base_url=None, dummy_base_url=None):
+def generate_report(msg, out_queue, cache_queue, bucket, base_url,
+                    dummy_base_url):
     """Workflow for generating report."""
     # local vars init
     data_dict = msg['data']
     user_id = data_dict['ticketID']
     report_type = msg['reportType']
+    data_purpose = msg['dataObjective']
+    receive_time = msg['receivedTime']
 
     # init return message
     uploaded_msg = {
@@ -157,7 +159,8 @@ def generate_report(msg, out_queue, cache_queue,
         uploaded_msg['status'] = 'error'
         uploaded_msg['args'] = ''
         uploaded_msg['stderr'] = 'Not find report type %s'%(report_type)
-        out_queue.put(json.dumps(uploaded_msg))
+        #out_queue.put(json.dumps(uploaded_msg))
+        out_queue.put(uploaded_msg)
         # add message to cache
         msg['reportProcessStatus'] = 'ERR'
         cache_queue.put(msg)
@@ -185,6 +188,50 @@ def generate_report(msg, out_queue, cache_queue,
         json_file = os.path.join(base_dir, '%s_data.json'%(user_id))
         with open(json_file, 'w') as jf:
             jf.write(json.dumps(data_dict)+'\n')
+
+    if data_purpose=='compute_only' and 'compute_ipynb' in report_cfg:
+        # run ipynb file
+        ipynb_name = report_cfg['compute_ipynb']
+        ipynb_file = os.path.join(base_dir, ipynb_name)
+        nbconvert_cmd = [
+            'jupyter-nbconvert',
+            '--ExecutePreprocessor.timeout=60',
+            '--execute',
+            ipynb_file,
+        ]
+        ret = subprocess.run(
+            ' '.join(nbconvert_cmd),
+            shell = True,
+            env = dict(os.environ, USERID=user_id),
+            stdout = subprocess.PIPE,
+            stderr = subprocess.PIPE,
+            encoding = 'utf-8',
+        )
+        # check compuation output status
+        if not ret.returncode==0:
+            uploaded_msg['status'] = 'error'
+            uploaded_msg['args'] = ret.args
+            uploaded_msg['stderr'] = ret.stderr
+            #out_queue.put(json.dumps(uploaded_msg))
+            out_queue.put(uploaded_msg)
+            # add message to cache
+            msg['reportProcessStatus'] = 'ERR'
+            cache_queue.put(msg)
+            #print('Error in computation stage!')
+            return None
+        
+        # if we get results successfully, save it to the db
+        result_file = os.path.join(base_dir, '%s_results.json'%(user_id))
+        result_data = json.load(open(result_file))
+        result_data['dataType'] = 'results'
+        result_data['reportType'] = report_type
+        result_data['dataStatus'] = data_purpose
+        result_data['receivedTime'] = receive_time
+        # add messages to cache
+        cache_queue.put(msg)
+        cache_queue.put(result_data)
+
+
 
     # run ipynb file
     ipynb_name = report_cfg['entry']
@@ -601,14 +648,13 @@ if __name__ == '__main__':
                 json_logger.info('"rest":"No data found in %s"'%(str(msg)))
                 #print('Not find data in message.')
                 continue
-
             try:
                 msg['data'] = eval(msg['data'])
             except:
                 json_logger.error('"rest":"Get invalid data - %s"'%(str(msg)))
                 continue
 
-            # get report type and the data purpose
+            # get report type and the data objectives
             if not msg['reportType']:
                 json_logger.info(
                     '"rest": "Get unrelated message - %s"'%(str(msg))
@@ -617,9 +663,9 @@ if __name__ == '__main__':
 
             if '|' in msg['reportType']:
                 report_type, data_purpose = msg['reportType'].split('|')
-            elif 'reportProcessStatus' in msg:
+            elif 'dataObjective' in msg:
                 report_type = msg['reportType']
-                data_purpose = msg['reportProcessStatus']
+                data_purpose = msg['dataObjective']
             else:
                 report_type = msg['reportType']
                 data_purpose = 'REPORT'
@@ -631,15 +677,19 @@ if __name__ == '__main__':
 
             # normalize message structure
             msg['reportType'] = report_type
-            msg['reportProcessStatus'] = data_purpose
+            msg['dataObjective'] = data_purpose
+            msg['reportProcessStatus'] = 'OK'
             if 'receivedTime' not in msg:
                 ts = datetime.datetime.strftime(
                     datetime.datetime.now(),
                     '%Y%m%d%H%M%S',
                 )
                 msg['receivedTime'] = ts
+            # key `dataType` is used for choosing which collection the
+            # message should be saved
+            msg['dataType'] = 'raw_msgs'
 
-            # save the message
+            # if the objective of the message is `store`
             if data_purpose=='STORE':
                 cache_queue.put(msg)
                 continue
@@ -650,12 +700,10 @@ if __name__ == '__main__':
                     msg,
                     out_queue,
                     cache_queue,
+                    bucket,
+                    base_url,
+                    dummy_base_url,
                 ),
-                {
-                    'bucket': bucket,
-                    'base_url': base_url,
-                    'dummy_base_url': dummy_base_url,
-                },
             )
 
             on_duty = True

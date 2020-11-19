@@ -7,4 +7,14 @@ toc_level = 2
 add_heading_number = True
 include_foreword = False
 include_article_summary = False
-oss_dir = erdaoqu
+oss_dir = sample
+
+[sample2]
+base_dir = /path/to/the/report/directory
+compute_ipynb = compute_notebook.ipynb
+pdf_ipynb = export2pdf.ipynb
+toc_level = 0
+add_heading_number = False
+include_foreword = False
+include_article_summary = False
+oss_dir = sample2
