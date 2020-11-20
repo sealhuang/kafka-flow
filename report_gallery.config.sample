@@ -7,4 +7,5 @@ toc_level = 2
 add_heading_number = True
 include_foreword = False
 include_article_summary = False
-oss_dir = erdaoqu
+oss_dir = sample
+
