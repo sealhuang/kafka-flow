@@ -50,13 +50,14 @@ class ReportQuester():
             msg_list.append(dict(msgs))
         elif isinstance(msgs, list):
             msg_list.extend(msgs)
+        msg_list = [dict(item) for item in msg_list]
 
         # normalize messages
         for item in msg_list:
             item['db_id'] = str(item['_id'])
             item['data'] = str(item['data'])
             item['receivedTime'] = str(item['receivedTime'])
-            item['reportProcessStatus'] = 'REPORT'
+            item['dataObjective'] = 'REPORT'
             if report_type:
                 item['reportType'] = report_type
             item.pop('_id')

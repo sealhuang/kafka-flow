@@ -144,13 +144,21 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
     user_id = data_dict['ticketID']
     report_type = msg['reportType']
     data_purpose = msg['dataObjective']
-    receive_time = msg['receivedTime']
 
     # init return message
     uploaded_msg = {
         'id': user_id,
         'report_type': report_type,
         'status': 'ok',
+    }
+    result_data = {
+        'dataType': 'results',
+        'reportType': report_type,
+        'dataObjective': data_purpose,
+        'receivedTime': msg['receivedTime'],
+        'user_id': data_dict['id'],
+        'ticketID': data_dict['ticketID'],
+        'token': data_dict['token'],
     }
 
     report_gallery = get_report_gallery()
@@ -231,13 +239,10 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
     # if we get computation results successfully, get the file path
     result_file = os.path.join(base_dir, '%s_results.json'%(user_id))
     try:
-        result_data = json.load(open(result_file))
-        if len(result_data):
-            uploaded_msg['reportData'] = {report_type: dict(result_data)}
-            result_data['dataType'] = 'results'
-            result_data['reportType'] = report_type
-            result_data['dataObjective'] = data_purpose
-            result_data['receivedTime'] = receive_time
+        calc_data = json.load(open(result_file))
+        if len(calc_data):
+            uploaded_msg['reportData'] = {report_type: dict(calc_data)}
+            result_data.update(calc_data)
         else:
             result_file = None
     except:
@@ -338,9 +343,8 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
             #out_queue.put(json.dumps(uploaded_msg))
             out_queue.put(uploaded_msg)
             # add message to cache
-            if result_file:
-                result_data['report_url'] = dummy_remote_url
-                cache_queue.put(result_data)
+            result_data['report_url'] = dummy_remote_url
+            cache_queue.put(result_data)
             cache_queue.put(msg)
         else:
             uploaded_msg['status'] = 'error'
@@ -434,17 +438,18 @@ def save_msgs(msg_list, db_config):
             update_msg_list = [
                 item for item in msg_list \
                 if (item['dataType']=='raw_msgs') and ('db_id' in item) and \
-                    (item['fromdb']==db_config.get('collection_name'))
+                    (item['fromdb']==db_config.get('raw_msg_collection'))
             ]
             result_list = [
                 item for item in msg_list if item['dataType']=='results'
             ]
+            print(len(result_list))
 
             # insert new messages
             if len(insert_msg_list):
                 insert_list = [dict(item) for item in insert_msg_list]
                 for item in insert_list:
-                    item['fromdb'] = db_config.get('collection_name')
+                    item['fromdb'] = db_config.get('raw_msg_collection')
                     item['receivedTimeFormatted'] = datetime.datetime.strptime(
                         item['receivedTime'],
                         '%Y%m%d%H%M%S',
@@ -459,7 +464,7 @@ def save_msgs(msg_list, db_config):
             if len(update_msg_list):
                 update_cmd = []
                 db_fields = ['dataObjective', 'reportProcessStatus', 'reportType']
-                for item in update_list:
+                for item in update_msg_list:
                     tmp = {}
                     for k in db_fields:
                         if k in item:
@@ -469,12 +474,10 @@ def save_msgs(msg_list, db_config):
                         {'$set': tmp},
                     ))
                 ret = msgs_col.bulk_write(update_cmd)
-                if not ret.modified_count==len(update_msg_list):
+                if not ret.matched_count==len(update_msg_list):
                     err_list.extend(update_msg_list)
 
             # update or insert new results
-            for item in upsert_list:
-
             if len(result_list):
                 upsert_list = [dict(item) for item in result_list]
                 upsert_cmd = []
