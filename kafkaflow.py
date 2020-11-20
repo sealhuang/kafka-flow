@@ -157,9 +157,22 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
         'dataObjective': data_purpose,
         'receivedTime': msg['receivedTime'],
         'user_id': data_dict['id'],
-        'ticketID': data_dict['ticketID'],
-        'token': data_dict['token'],
     }
+    sel_keys = [
+        'ticketID',
+        'token',
+        'name',
+        'province',
+        'city',
+        'region',
+        'gender',
+        'school',
+        'grade',
+        'class',
+        'test_date',
+    ]
+    for k in sel_keys:
+        result_data[k] = data_dict[k]
 
     report_gallery = get_report_gallery()
 
@@ -499,7 +512,7 @@ def save_msgs(msg_list, db_config):
                         upsert=True,
                     ))
                 ret = results_col.bulk_write(upsert_cmd)
-                if not ret.upserted_count==len(upsert_list):
+                if not (ret.matched_count+ret.inserted_count)==len(upsert_list):
                     err_list.extend(result_list)
 
             assert len(err_list)==0
