@@ -188,51 +188,7 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
         json_file = os.path.join(base_dir, '%s_data.json'%(user_id))
         with open(json_file, 'w') as jf:
             jf.write(json.dumps(data_dict)+'\n')
-
-    if data_purpose=='compute_only' and 'compute_ipynb' in report_cfg:
-        # run ipynb file
-        ipynb_name = report_cfg['compute_ipynb']
-        ipynb_file = os.path.join(base_dir, ipynb_name)
-        nbconvert_cmd = [
-            'jupyter-nbconvert',
-            '--ExecutePreprocessor.timeout=60',
-            '--execute',
-            ipynb_file,
-        ]
-        ret = subprocess.run(
-            ' '.join(nbconvert_cmd),
-            shell = True,
-            env = dict(os.environ, USERID=user_id),
-            stdout = subprocess.PIPE,
-            stderr = subprocess.PIPE,
-            encoding = 'utf-8',
-        )
-        # check compuation output status
-        if not ret.returncode==0:
-            uploaded_msg['status'] = 'error'
-            uploaded_msg['args'] = ret.args
-            uploaded_msg['stderr'] = ret.stderr
-            #out_queue.put(json.dumps(uploaded_msg))
-            out_queue.put(uploaded_msg)
-            # add message to cache
-            msg['reportProcessStatus'] = 'ERR'
-            cache_queue.put(msg)
-            #print('Error in computation stage!')
-            return None
         
-        # if we get results successfully, save it to the db
-        result_file = os.path.join(base_dir, '%s_results.json'%(user_id))
-        result_data = json.load(open(result_file))
-        result_data['dataType'] = 'results'
-        result_data['reportType'] = report_type
-        result_data['dataStatus'] = data_purpose
-        result_data['receivedTime'] = receive_time
-        # add messages to cache
-        cache_queue.put(msg)
-        cache_queue.put(result_data)
-
-
-
     # run ipynb file
     ipynb_name = report_cfg['entry']
     ipynb_file = os.path.join(base_dir, ipynb_name)
@@ -254,116 +210,174 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
         stderr = subprocess.PIPE,
         encoding = 'utf-8',
     )
+    # user's image dir
+    user_img_dir = os.path.join(img_dir, user_id)
     # check nbconvert output status
     if not ret.returncode==0:
         uploaded_msg['status'] = 'error'
         uploaded_msg['args'] = ret.args
         uploaded_msg['stderr'] = ret.stderr
-        out_queue.put(json.dumps(uploaded_msg))
+        #out_queue.put(json.dumps(uploaded_msg))
+        out_queue.put(uploaded_msg)
         # add message to cache
         msg['reportProcessStatus'] = 'ERR'
         cache_queue.put(msg)
         #print('Error in nbconvert stage!')
         # clean img dir
-        user_img_dir = os.path.join(img_dir, user_id)
         if os.path.exists(user_img_dir):
             shutil.rmtree(user_img_dir)
         return None
 
-    # convert html file to standard format
-    if eval(report_cfg['add_heading_number']):
-        heading_number_param = '--add_heading_number'
-    else:
-        heading_number_param = ''
-    if eval(report_cfg['include_foreword']):
-        foreword_param = '--include_foreword'
-    else:
-        foreword_param = ''
-    if eval(report_cfg['include_article_summary']):
-        article_summary_param = \
-            '--include_article_summary=' + report_cfg['include_article_summary']
-    else:
-        article_summary_param = ''
+    # if we get computation results successfully, get the file path
+    result_file = os.path.join(base_dir, '%s_results.json'%(user_id))
+    try:
+        result_data = json.load(open(result_file))
+        if len(result_data):
+            uploaded_msg['reportData'] = {report_type: dict(result_data)}
+            result_data['dataType'] = 'results'
+            result_data['reportType'] = report_type
+            result_data['dataObjective'] = data_purpose
+            result_data['receivedTime'] = receive_time
+        else:
+            result_file = None
+    except:
+        result_file = None
 
-
-    std_html_file = os.path.join(base_dir, 'std_report_%s.html'%(user_id))
-    trans2std_cmd = [
-        'trans2std',
-        '--in ' + html_file,
-        '--out_file ' + std_html_file,
-        '--toc_level ' + report_cfg['toc_level'],
-        heading_number_param,
-        foreword_param,
-        article_summary_param,
-    ]
-    ret = subprocess.run(' '.join(trans2std_cmd), shell=True)
-    # check trans2std output status
-    if not ret.returncode==0:
-        uploaded_msg['status'] = 'error'
-        uploaded_msg['args'] = ret.args
-        uploaded_msg['stderr'] = ret.stderr
-        out_queue.put(json.dumps(uploaded_msg))
-        # add message to cache
-        msg['reportProcessStatus'] = 'ERR'
-        cache_queue.put(msg)
-        #print('Error in trans2std stage!')
-        return None
-
-    # convert html to pdf
+    # timestamp for further usage
     ts = datetime.datetime.strftime(
         datetime.datetime.now(),
         '%Y%m%d%H%M%S',
     )
-    pdf_filename = 'report_%s_%s.pdf'%(user_id, ts)
-    pdf_file = os.path.join(pdf_dir, pdf_filename)
-    weasyprint_cmd = ['weasyprint', std_html_file, pdf_file]
-    ret = subprocess.run(' '.join(weasyprint_cmd), shell=True)
-    # check weasyprint output status
-    if not ret.returncode==0:
-        uploaded_msg['status'] = 'error'
-        uploaded_msg['args'] = ret.args
-        uploaded_msg['stderr'] = ret.stderr
-        out_queue.put(json.dumps(uploaded_msg))
-        # add message to cache
-        msg['reportProcessStatus'] = 'ERR'
-        cache_queue.put(msg)
-        #print('Error in weasyprint stage!')
-        # clean img dir
-        user_img_dir = os.path.join(img_dir, user_id)
+
+    # if the pdf file is needed
+    if data_purpose=='REPORT':
+        # convert html file to standard format
+        if eval(report_cfg['add_heading_number']):
+            heading_number_param = '--add_heading_number'
+        else:
+            heading_number_param = ''
+        if eval(report_cfg['include_foreword']):
+            foreword_param = '--include_foreword'
+        else:
+            foreword_param = ''
+        if eval(report_cfg['include_article_summary']):
+            article_summary_param = '--include_article_summary=' + \
+                                    report_cfg['include_article_summary']
+        else:
+            article_summary_param = ''
+
+
+        std_html_file = os.path.join(base_dir, 'std_report_%s.html'%(user_id))
+        trans2std_cmd = [
+            'trans2std',
+            '--in ' + html_file,
+            '--out_file ' + std_html_file,
+            '--toc_level ' + report_cfg['toc_level'],
+            heading_number_param,
+            foreword_param,
+            article_summary_param,
+        ]
+        ret = subprocess.run(' '.join(trans2std_cmd), shell=True)
+        # check trans2std output status
+        if not ret.returncode==0:
+            uploaded_msg['status'] = 'error'
+            uploaded_msg['args'] = ret.args
+            uploaded_msg['stderr'] = ret.stderr
+            #out_queue.put(json.dumps(uploaded_msg))
+            out_queue.put(uploaded_msg)
+            # add message to cache
+            msg['reportProcessStatus'] = 'ERR'
+            cache_queue.put(msg)
+            #print('Error in trans2std stage!')
+            # clean
+            os.remove(html_file)
+            if os.path.exists(std_html_file):
+                os.remove(std_html_file)
+            if os.path.exists(user_img_dir):
+                shutil.rmtree(user_img_dir)
+            return None
+
+        # convert html to pdf
+        pdf_filename = 'report_%s_%s.pdf'%(user_id, ts)
+        pdf_file = os.path.join(pdf_dir, pdf_filename)
+        weasyprint_cmd = ['weasyprint', std_html_file, pdf_file]
+        ret = subprocess.run(' '.join(weasyprint_cmd), shell=True)
+        # check weasyprint output status
+        if not ret.returncode==0:
+            uploaded_msg['status'] = 'error'
+            uploaded_msg['args'] = ret.args
+            uploaded_msg['stderr'] = ret.stderr
+            out_queue.put(uploaded_msg)
+            #out_queue.put(json.dumps(uploaded_msg))
+            # add message to cache
+            msg['reportProcessStatus'] = 'ERR'
+            cache_queue.put(msg)
+            #print('Error in weasyprint stage!')
+            # clean
+            os.remove(html_file)
+            if os.path.exists(std_html_file):
+                os.remove(std_html_file)
+            if os.path.exists(user_img_dir):
+                shutil.rmtree(user_img_dir)
+            return None
+
+        # upload file
+        remote_file = os.path.join(report_cfg['oss_dir'], pdf_filename)
+        remote_url = upload_file(bucket, base_url, pdf_file, remote_file)
+
+        # clean
+        os.remove(html_file)
+        os.remove(std_html_file)
         if os.path.exists(user_img_dir):
             shutil.rmtree(user_img_dir)
-        return None
 
-    # clean
-    if isinstance(json_file, str):
-        targ_file = os.path.join(data_dir, '%s_%s.json'%(user_id, ts))
-        shutil.move(json_file, targ_file)
-    os.remove(html_file)
-    os.remove(std_html_file)
-    user_img_dir = os.path.join(img_dir, user_id)
-    if os.path.exists(user_img_dir):
-        shutil.rmtree(user_img_dir)
+        if remote_url:
+            uploaded_msg['status'] = 'ok'
+            dummy_remote_url = 'https://'+dummy_base_url+'/'+remote_file
+            uploaded_msg['urls'] = {report_type: dummy_remote_url}
+            #out_queue.put(json.dumps(uploaded_msg))
+            out_queue.put(uploaded_msg)
+            # add message to cache
+            if result_file:
+                result_data['report_url'] = dummy_remote_url
+                cache_queue.put(result_data)
+            cache_queue.put(msg)
+        else:
+            uploaded_msg['status'] = 'error'
+            uploaded_msg['args'] = 'Uploads to oss.'
+            uploaded_msg['stderr'] = 'Falied to upload pdf file.'
+            #out_queue.put(json.dumps(uploaded_msg))
+            out_queue.put(uploaded_msg)
+            msg['reportProcessStatus'] = 'ERR2OSS'
+            cache_queue.put(msg)
+            return None
 
-    remote_file = os.path.join(report_cfg['oss_dir'], pdf_filename)
-    
-    # upload file
-    remote_url = upload_file(bucket, base_url, pdf_file, remote_file)
+    elif data_purpose=='CALC':
+        # clean
+        os.remove(html_file)
+        if os.path.exists(user_img_dir):
+            shutil.rmtree(user_img_dir)
 
-    if remote_url:
-        uploaded_msg['status'] = 'ok'
-        dummy_remote_url = 'https://'+dummy_base_url+'/'+remote_file
-        uploaded_msg['urls'] = {report_type: dummy_remote_url}
-        out_queue.put(json.dumps(uploaded_msg))
-        # add message to cache
-        msg['report_url'] = dummy_remote_url
-        cache_queue.put(msg)
-    else:
-        uploaded_msg['status'] = 'error'
-        uploaded_msg['args'] = 'Uploads to oss.'
-        uploaded_msg['stderr'] = 'Falied to upload pdf file.'
-        out_queue.put(json.dumps(uploaded_msg))
-        msg['reportProcessStatus'] = 'ERR2OSS'
-        cache_queue.put(msg)
+        if result_file:
+            uploaded_msg['status'] = 'ok'
+            out_queue.put(uploaded_msg)
+            cache_queue.put(result_data)
+            cache_queue.put(msg)
+        else:
+            uploaded_msg['status'] = 'error'
+            uploaded_msg['args'] = 'Calculate attributes.'
+            uploaded_msg['stderr'] = 'No results file found'
+            out_queue.put(uploaded_msg)
+            msg['reportProcessStatus'] = 'ERR'
+            cache_queue.put(msg)
+            return None
+
+    # move raw data and result file
+    targ_file = os.path.join(data_dir, '%s_%s.json'%(user_id, ts))
+    shutil.move(json_file, targ_file)
+    if result_file:
+        targ_file = os.path.join(data_dir, '%s_results_%s.json'%(user_id, ts))
+        shutil.move(result_file, targ_file)
 
 def upload_file(bucket, base_url, src_file, remote_file):
     """Upload files to aliyun oss.
@@ -409,40 +423,42 @@ def save_msgs(msg_list, db_config):
 
             # locate db and collection
             db = myclient[db_config.get('db_name')]
-            msgs_col = db[db_config.get('collection_name')]
+            msgs_col = db[db_config.get('raw_msg_collection')]
+            results_col = db[db_config.get('result_collection')]
 
-            # classify messasges into different groups based their source
-            # insert new messages
-            insert_list = [
-                dict(item) for item in msg_list if 'fromdb' not in item
+            # classify messages based on their destination and source
+            insert_msg_list = [
+                item for item in msg_list \
+                if (item['dataType']=='raw_msgs') and ('fromdb' not in item)
             ]
-            for item in insert_list:
-                item['receivedTimeFormatted'] = datetime.datetime.strptime(
-                    item['receivedTime'],
-                    '%Y%m%d%H%M%S',
-                )
-                item['receivedTime'] = int(item['receivedTime'])
+            update_msg_list = [
+                item for item in msg_list \
+                if (item['dataType']=='raw_msgs') and ('db_id' in item) and \
+                    (item['fromdb']==db_config.get('collection_name'))
+            ]
+            result_list = [
+                item for item in msg_list if item['dataType']=='results'
+            ]
 
-            if len(insert_list):
+            # insert new messages
+            if len(insert_msg_list):
+                insert_list = [dict(item) for item in insert_msg_list]
                 for item in insert_list:
                     item['fromdb'] = db_config.get('collection_name')
+                    item['receivedTimeFormatted'] = datetime.datetime.strptime(
+                        item['receivedTime'],
+                        '%Y%m%d%H%M%S',
+                    )
+                    item['receivedTime'] = int(item['receivedTime'])
+                    item.pop('dataType')
                 ret = msgs_col.insert_many(insert_list)
                 if not (len(ret.inserted_ids)==len(insert_list)):
-                    for item in insert_list:
-                        item.pop('fromdb')
-                        item.pop('receivedTimeFormatted')
-                        item['receivedTime'] = str(item['receivedTime'])
-                    err_list.extend(insert_list)
+                    err_list.extend(insert_msg_list)
 
             # update exist messages in db
-            update_list = [
-                item for item in msg_list
-                    if ('db_id' in item) and \
-                    item['fromdb']==db_config.get('collection_name')
-            ]
-            if len(update_list):
+            if len(update_msg_list):
                 update_cmd = []
-                db_fields = ['reportProcessStatus', 'report_url', 'reportType']
+                db_fields = ['dataObjective', 'reportProcessStatus', 'reportType']
                 for item in update_list:
                     tmp = {}
                     for k in db_fields:
@@ -453,8 +469,35 @@ def save_msgs(msg_list, db_config):
                         {'$set': tmp},
                     ))
                 ret = msgs_col.bulk_write(update_cmd)
-                if not ret.modified_count==len(update_list):
-                    err_list.extend(update_list)
+                if not ret.modified_count==len(update_msg_list):
+                    err_list.extend(update_msg_list)
+
+            # update or insert new results
+            for item in upsert_list:
+
+            if len(result_list):
+                upsert_list = [dict(item) for item in result_list]
+                upsert_cmd = []
+                filter_fields = ['reportType', 'user_id', 'ticketID']
+                for item in upsert_list:
+                    filter_query = {}
+                    for k in filter_fields:
+                        filter_query[k] = item[k]
+                        item.pop(k)
+                    item['receivedTimeFormatted'] = datetime.datetime.strptime(
+                        item['receivedTime'],
+                        '%Y%m%d%H%M%S',
+                    )
+                    item['receivedTime'] = int(item['receivedTime'])
+                    item.pop('dataType')
+                    upsert_cmd.append(UpdateOne(
+                        filter_query,
+                        {'$set': item},
+                        upsert=True,
+                    ))
+                ret = results_col.bulk_write(upsert_cmd)
+                if not ret.upserted_count==len(upsert_list):
+                    err_list.extend(result_list)
 
             assert len(err_list)==0
                 
@@ -570,20 +613,20 @@ if __name__ == '__main__':
         on_duty = False
 
         # save messages to db or file
-        if cache_queue.full() or ((time.time() - last_time) > cache_max_time):
-            if not cache_queue.empty():
-                msg_list = []
-                while not cache_queue.empty():
-                    msg_list.append(cache_queue.get())
-                save_ret = save_msgs(msg_list, envs['mongodb'])
-                if save_ret=='msg2db_ok':
-                    json_logger.info('"rest":"Save msgs to db successfully"')
-                elif save_ret=='msg2file_ok':
-                    json_logger.info('"rest":"Save msgs to file successfully"')
-                elif save_ret=='msg2db_err':
-                    json_logger.error('"rest":"Error while save msgs to db"')
-                elif save_ret=='msg2file_err':
-                    json_logger.error('"rest":"Error while save msgs to file"')
+        if (not cache_queue.empty()) and \
+           (cache_queue.full() or ((time.time()-last_time) > cache_max_time)):
+            msg_list = []
+            while not cache_queue.empty():
+                msg_list.append(cache_queue.get())
+            save_ret = save_msgs(msg_list, envs['mongodb'])
+            if save_ret=='msg2db_ok':
+                json_logger.info('"rest":"Save msgs to db successfully"')
+            elif save_ret=='msg2file_ok':
+                json_logger.info('"rest":"Save msgs to file successfully"')
+            elif save_ret=='msg2db_err':
+                json_logger.error('"rest":"Error while save msgs to db"')
+            elif save_ret=='msg2file_err':
+                json_logger.error('"rest":"Error while save msgs to file"')
 
             last_time = time.time()
             on_duty = True
@@ -591,7 +634,7 @@ if __name__ == '__main__':
         # handle process results
         if not out_queue.empty():
             msg = out_queue.get()
-            msg = json.loads(msg)
+            #msg = json.loads(msg)
             #print(msg)
             if msg['status']=='ok':
                 try:
