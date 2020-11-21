@@ -13,7 +13,7 @@ import multiprocessing
 from configparser import ConfigParser
 from logging.handlers import TimedRotatingFileHandler
 import pymongo
-from pymongo import UpdateOne
+from pymongo import UpdateOne, ReplaceOne
 from urllib.parse import quote_plus
 import bson
 
@@ -499,20 +499,19 @@ def save_msgs(msg_list, db_config):
                     filter_query = {}
                     for k in filter_fields:
                         filter_query[k] = item[k]
-                        item.pop(k)
                     item['receivedTimeFormatted'] = datetime.datetime.strptime(
                         item['receivedTime'],
                         '%Y%m%d%H%M%S',
                     )
                     item['receivedTime'] = int(item['receivedTime'])
                     item.pop('dataType')
-                    upsert_cmd.append(UpdateOne(
+                    upsert_cmd.append(ReplaceOne(
                         filter_query,
-                        {'$set': item},
+                        item,
                         upsert=True,
                     ))
                 ret = results_col.bulk_write(upsert_cmd)
-                if not (ret.matched_count+ret.inserted_count)==len(upsert_list):
+                if not (ret.matched_count+ret.upserted_count)==len(upsert_list):
                     err_list.extend(result_list)
 
             assert len(err_list)==0
