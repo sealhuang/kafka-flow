@@ -64,6 +64,7 @@ class ReportQuester():
             item.pop('receivedTimeFormatted')
 
         # send request
+        c = 0
         for msg in msg_list:
             try:
                 future = self.kafka_sender.send(self.send_topic, msg)
@@ -81,7 +82,9 @@ class ReportQuester():
             else:
                 #print('Send report request for message %s successfully' % (
                 #    msg['db_id']))
-                pass
+                c += 1
+        print('Send %s report requests successfully' % (c))
+
 
 
 def export_reports(msgs, name_fields, export_dir,
