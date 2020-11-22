@@ -79,8 +79,9 @@ class ReportQuester():
                 print('Error while sending message which id is %s' % (
                     msg['db_id']))
             else:
-                print('Send report request for message %s successfully' % (
-                    msg['db_id']))
+                #print('Send report request for message %s successfully' % (
+                #    msg['db_id']))
+                pass
 
 
 def export_reports(msgs, name_fields, export_dir,
