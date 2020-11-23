@@ -456,7 +456,6 @@ def save_msgs(msg_list, db_config):
             result_list = [
                 item for item in msg_list if item['dataType']=='results'
             ]
-            print(len(result_list))
 
             # insert new messages
             if len(insert_msg_list):
