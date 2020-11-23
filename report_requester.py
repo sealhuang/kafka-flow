@@ -42,7 +42,7 @@ class ReportQuester():
             retries = 5,
         )
 
-    def send(self, msgs, report_type=None):
+    def send(self, msgs, report_type=None, data_objective=None):
         """Send report messages."""
         # get message list
         msg_list = []
@@ -57,7 +57,10 @@ class ReportQuester():
             item['db_id'] = str(item['_id'])
             item['data'] = str(item['data'])
             item['receivedTime'] = str(item['receivedTime'])
-            item['dataObjective'] = 'REPORT'
+            if data_objective:
+                item['dataObjective'] = data_objective
+            else:
+                item['dataObjective'] = 'REPORT'
             if report_type:
                 item['reportType'] = report_type
             item.pop('_id')
@@ -96,9 +99,10 @@ def export_reports(msgs, name_fields, export_dir,
 
     # get message list
     msg_list = []
+
     if isinstance(msgs, dict):
-        if ('reportProcessStatus' in msgs) and \
-           (msgs['reportProcessStatus']=='REPORT') and \
+        if ('dataObjective' in msgs) and \
+           (msgs['dataObjective']=='REPORT') and \
            ('report_url' in msgs):
             msg_list.append(dict(msgs))
         else:
@@ -106,10 +110,11 @@ def export_reports(msgs, name_fields, export_dir,
             print(msgs)
             return
 
-    if isinstance(msgs, list):
+    elif isinstance(msgs, list):
         for item in msgs:
-            if ('reportProcessStatus' in item) and \
-               (item['reportProcessStatus']=='REPORT') and \
+            if (isinstance(item, dict)) and \
+               ('dataObjective' in item) and \
+               (item['dataObjective']=='REPORT') and \
                ('report_url' in item):
                 msg_list.append(dict(item))
             else:
@@ -120,7 +125,7 @@ def export_reports(msgs, name_fields, export_dir,
     # check name fields
     for item in msg_list:
         for k in name_fields:
-            if not k in item['data']:
+            if not k in item:
                 print('Data error!')
                 print('field %s does not exist in data'%(k))
                 print(item)
@@ -153,7 +158,7 @@ def export_reports(msgs, name_fields, export_dir,
         # generate new file name
         old_pdf = old_addr.split('/')[-1]
         time_tag = old_pdf.split('.')[0].split('_')[-1]
-        new_pdf_fields = [item['data'][k] for k in name_fields]
+        new_pdf_fields = [item[k] for k in name_fields]
         new_pdf_fields = [ele for ele in new_pdf_fields if ele]
         new_pdf_fields.append(time_tag)
         new_addr = '/'.join([export_dir, '_'.join(new_pdf_fields)+'.pdf'])
