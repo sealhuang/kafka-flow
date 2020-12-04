@@ -55,7 +55,7 @@ class TimedRotatingCompressedFileHandler(TimedRotatingFileHandler):
 class KafkaReceiver(multiprocessing.Process):
     """Message Receiver for the Sundial-Report-Stream."""
 
-    def __init__(self, envs, queue):
+    def __init__(self, envs, fast_queue, queue):
         """Initialize kafka message receiver process."""
         multiprocessing.Process.__init__(self)
 
@@ -73,6 +73,7 @@ class KafkaReceiver(multiprocessing.Process):
         )
 
         self.queue = queue
+        self.fast_queue = fast_queue
 
     def run(self):
         """Receive message and put it in the queue."""
@@ -80,7 +81,11 @@ class KafkaReceiver(multiprocessing.Process):
         for msg in self.consumer:
             line = msg.value.decode('utf-8').strip()
             #print(line)
-            self.queue.put(line)
+            _msg = json.loads(line)
+            if 'priority' in _msg and _msg['priority']=='low':
+                self.queue.put(line)
+            else:
+                self.fast_queue.put(line)
 
 
 def get_json_logger(log_level=logging.DEBUG):
@@ -586,6 +591,7 @@ if __name__ == '__main__':
 
     # create data queue for multiprocessing
     data_manager = multiprocessing.Manager()
+    fast_in_queue = data_manager.Queue(envs.getint('general', 'in_queue_size'))
     in_queue = data_manager.Queue(envs.getint('general', 'in_queue_size'))
     out_queue = data_manager.Queue(envs.getint('general', 'out_queue_size'))
     cache_queue = data_manager.Queue(envs.getint('general', 'cache_queue_size'))
@@ -600,7 +606,7 @@ if __name__ == '__main__':
         retries = 5,
     )
     #-- initialize kafka message receiver process
-    kafka_receiver = KafkaReceiver(envs['kafka'], in_queue)
+    kafka_receiver = KafkaReceiver(envs['kafka'], fast_in_queue, in_queue)
     kafka_receiver.start()
 
     #XXX for test: Create a message writer
@@ -695,9 +701,14 @@ if __name__ == '__main__':
             on_duty = True
 
         # process new message
-        if not in_queue.empty():
-            raw_msg = in_queue.get()
+        if not in_queue.empty() or not fast_in_queue.empty():
+            if not fast_in_queue.empty():
+                raw_msg = fast_in_queue.get()
+            else:
+                raw_msg = in_queue.get()
             msg = json.loads(raw_msg)
+            if 'priority' in msg:
+                msg.pop('priority')
             #print(msg)
 
             # validate received data
