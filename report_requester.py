@@ -2,6 +2,7 @@
 
 import os
 import json
+import time
 from configparser import ConfigParser
 
 from kafka import KafkaProducer
@@ -88,6 +89,7 @@ class ReportQuester():
                 #print('Send report request for message %s successfully' % (
                 #    msg['db_id']))
                 c += 1
+            time.sleep(0.6)
         print('Send %s report requests successfully' % (c))
 
 
