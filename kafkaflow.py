@@ -621,7 +621,8 @@ if __name__ == '__main__':
     dummy_base_url = envs.get('aliyun', 'dummy_oss_url')
 
     # Create multiprocessing pool to process data
-    pool = multiprocessing.Pool(envs.getint('general', 'mp_worker_num'))
+    max_worker_num = envs.getint('general', 'mp_worker_num')
+    pool = multiprocessing.Pool(max_worker_num)
 
     # logging
     json_logger = get_json_logger()
@@ -701,7 +702,8 @@ if __name__ == '__main__':
             on_duty = True
 
         # process new message
-        if not in_queue.empty() or not fast_in_queue.empty():
+        if (pool._taskqueue.qsize() <= (3*max_worker_num)) and \
+           (not in_queue.empty() or not fast_in_queue.empty()):
             if not fast_in_queue.empty():
                 raw_msg = fast_in_queue.get()
             else:
