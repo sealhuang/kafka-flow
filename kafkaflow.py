@@ -562,6 +562,23 @@ def save_msgs(msg_list, db_config):
                 return 'msg2file_ok'
 
 
+def normalize_ret_dict(d):
+    """Normalize return message."""
+    assert isinstance(d, dict)
+
+    for k in d:
+        if isinstance(d[k], dict):
+            normalize_ret_dict(d[k])
+        elif isinstance(d[k], int):
+            d[k] = str(d[k])
+        elif isinstance(d[k], float):
+            d[k] = str(d[k])
+        elif isinstance(d[k], list):
+            d[k] = '|'.join([str(ele) for ele in d[k]])
+        elif isinstance(d[k], tuple):
+            d[k] = '|'.join([str(ele) for ele in d[k]])
+
+
 def queue_writer(q):
     """For test."""
     for i in range(10):
@@ -655,7 +672,7 @@ if __name__ == '__main__':
         # handle process results
         if not out_queue.empty():
             msg = out_queue.get()
-            #msg = json.loads(msg)
+            normalize_ret_dict(msg)
             #print(msg)
             if msg['status']=='ok':
                 try:
