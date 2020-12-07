@@ -149,6 +149,7 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
     user_id = data_dict['ticketID']
     report_type = msg['reportType']
     data_purpose = msg['dataObjective']
+    rec_ts = msg['receivedTime']
 
     # init return message
     uploaded_msg = {
@@ -395,10 +396,10 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
             return None
 
     # move raw data and result file
-    targ_file = os.path.join(data_dir, '%s_%s.json'%(user_id, ts))
+    targ_file = os.path.join(data_dir, '%s_%s.json'%(user_id, rec_ts))
     shutil.move(json_file, targ_file)
     if result_file:
-        targ_file = os.path.join(data_dir, '%s_results_%s.json'%(user_id, ts))
+        targ_file = os.path.join(data_dir, '%s_results_%s.json'%(user_id, rec_ts))
         shutil.move(result_file, targ_file)
 
 def upload_file(bucket, base_url, src_file, remote_file):
