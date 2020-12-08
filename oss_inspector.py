@@ -57,24 +57,27 @@ if __name__ == '__main__':
         envs['aliyun']['oss_endpoint_name'],
     ])
 
+    # upload file
+    upload_file(bucket, base_url, 'test.pdf', 'test/test.pdf')
+
     # remove file
     #oss_list = [upload_files[k][1] for k in upload_files]
     #delete_files(bucket, oss_list)
     
     # remove selected files
-    sel_files = []
-    for obj in oss2.ObjectIterator(bucket):
-        # list dir
-        if obj.is_prefix():
-            print('-'*10)
-            print(obj.key)
-        # list files
-        else:
-            print(obj.key)
-            if 'mathDiagnosisK8_v1/' in obj.key:
-                sel_files.append(obj.key)
+    #sel_files = []
+    #for obj in oss2.ObjectIterator(bucket):
+    #    # list dir
+    #    if obj.is_prefix():
+    #        print('-'*10)
+    #        print(obj.key)
+    #    # list files
+    #    else:
+    #        print(obj.key)
+    #        if 'mathDiagnosisK8_v1/' in obj.key:
+    #            sel_files.append(obj.key)
 
-    print(sel_files)
-    for item in sel_files:
-        bucket.delete_object(item)
+    #print(sel_files)
+    #for item in sel_files:
+    #    bucket.delete_object(item)
 

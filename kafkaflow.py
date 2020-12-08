@@ -20,6 +20,7 @@ import bson
 import oss2
 from kafka import KafkaConsumer, KafkaProducer
 from kafka.errors import KafkaError, KafkaTimeoutError
+from weasyprint import HTML
 
 
 class TimedRotatingCompressedFileHandler(TimedRotatingFileHandler):
@@ -324,13 +325,19 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
         # convert html to pdf
         pdf_filename = 'report_%s_%s.pdf'%(user_id, ts)
         pdf_file = os.path.join(pdf_dir, pdf_filename)
-        weasyprint_cmd = ['weasyprint', std_html_file, pdf_file]
-        ret = subprocess.run(' '.join(weasyprint_cmd), shell=True)
+        #weasyprint_cmd = ['weasyprint', std_html_file, pdf_file]
+        #ret = subprocess.run(' '.join(weasyprint_cmd), shell=True)
+        try:
+            HTML(std_html_file).write_pdf(pdf_file)
+ 
         # check weasyprint output status
-        if not ret.returncode==0:
+        except:
+        #if not ret.returncode==0:
             uploaded_msg['status'] = 'error'
-            uploaded_msg['args'] = ret.args
-            uploaded_msg['stderr'] = ret.stderr
+            #uploaded_msg['args'] = ret.args
+            #uploaded_msg['stderr'] = ret.stderr
+            uploaded_msg['args'] = ''
+            uploaded_msg['stderr'] = 'Err in weasyprint process'
             out_queue.put(uploaded_msg)
             #out_queue.put(json.dumps(uploaded_msg))
             # add message to cache
@@ -561,7 +568,6 @@ def save_msgs(msg_list, db_config):
                 return 'msg2db_err'
             else:
                 return 'msg2file_ok'
-
 
 def normalize_ret_dict(d):
     """Normalize return message."""
