@@ -361,6 +361,8 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
         os.remove(std_html_file)
         if os.path.exists(user_img_dir):
             shutil.rmtree(user_img_dir)
+        if os.path.exists(pdf_file):
+            os.remove(pdf_file)
 
         if remote_url:
             uploaded_msg['status'] = 'ok'
