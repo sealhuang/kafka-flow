@@ -329,6 +329,7 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
         #ret = subprocess.run(' '.join(weasyprint_cmd), shell=True)
         try:
             HTML(std_html_file).write_pdf(pdf_file)
+            assert os.path.exists(pdf_file)
  
         # check weasyprint output status
         except:
