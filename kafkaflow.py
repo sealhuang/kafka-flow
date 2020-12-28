@@ -682,7 +682,7 @@ if __name__ == '__main__':
         # handle process results
         if not out_queue.empty():
             msg = out_queue.get()
-            normalize_ret_dict(msg)
+            #normalize_ret_dict(msg)
             #print(msg)
             if msg['status']=='ok':
                 try:
