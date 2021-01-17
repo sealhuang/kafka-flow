@@ -43,7 +43,8 @@ class ReportQuester():
             retries = 5,
         )
 
-    def send(self, msgs, report_type=None, data_objective=None, priority=None):
+    def send(self, msgs, report_type=None, data_objective=None,
+             priority=None, callback='Y'):
         """Send report messages."""
         # get message list
         msg_list = []
@@ -66,6 +67,8 @@ class ReportQuester():
                 item['reportType'] = report_type
             if priority and priority in ['high', 'low']:
                 item['priority'] = priority
+            if callback in ['Y', 'N']:
+                item['callback'] = callback
             item.pop('_id')
             item.pop('receivedTimeFormatted')
 

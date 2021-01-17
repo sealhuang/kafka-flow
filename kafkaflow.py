@@ -151,12 +151,18 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
     report_type = msg['reportType']
     data_purpose = msg['dataObjective']
     rec_ts = msg['receivedTime']
+    callback_flag = True
+    if 'callback' in msg:
+        if msg['callback']=='N':
+            callback_flag = False
+        msg.pop('callback')
 
     # init return message
     uploaded_msg = {
         'id': user_id,
         'report_type': report_type,
         'status': 'ok',
+        'callback': callback_flag,
     }
     result_data = {
         'dataType': 'results',
@@ -682,6 +688,9 @@ if __name__ == '__main__':
         # handle process results
         if not out_queue.empty():
             msg = out_queue.get()
+            callback_flag = msg.pop('callback')
+            if not callback_flag:
+                continue
             #normalize_ret_dict(msg)
             #print(msg)
             if msg['status']=='ok':
