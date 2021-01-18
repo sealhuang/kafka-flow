@@ -32,6 +32,7 @@ class ReportQuester():
             return
 
         self.send_topic = envs.get('kafka', 'send_topic')
+        self.callback_topic = envs.get('kafka', 'callback_topic')
 
         self.kafka_sender = KafkaProducer(
             sasl_mechanism = envs.get('kafka', 'sasl_mechanism'),
@@ -95,6 +96,44 @@ class ReportQuester():
             time.sleep(0.6)
         print('Send %s report requests successfully' % (c))
 
+    def callback(self, msgs):
+        """Send report generated messages."""
+        # get message list
+        msg_list = []
+        if isinstance(msgs, dict):
+            msg_list.append(dict(msgs))
+        elif isinstance(msgs, list):
+            msg_list.extend(msgs)
+        msg_list = [dict(item) for item in msg_list]
+
+        # ckeck message format
+        for msg in msg_list:
+            for k in ['id', 'report_type', 'status', 'urls']:
+                assert k in msg
+            assert msg['status']=='ok'
+
+        # send request
+        c = 0
+        for msg in msg_list:
+            try:
+                future = self.kafka_sender.send(self.callback_topic, msg)
+                record_metadata = future.get(timeout=30)
+                assert future.succeeded()
+            except KafkaTimeoutError as kte:
+                print('Timeout while sending message which id is %s' % (
+                    msg['id']))
+            except KafkaError as ke:
+                print('KafkaError while sending message which id is %s' % (
+                    msg['id']))
+            except:
+                print('Error while sending message which id is %s' % (
+                    msg['id']))
+            else:
+                #print('Send report request for message %s successfully' % (
+                #    msg['db_id']))
+                c += 1
+            time.sleep(0.6)
+        print('Send %s report-generated message successfully' % (c))
 
 
 def export_reports(msgs, name_fields, export_dir,
