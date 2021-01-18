@@ -132,7 +132,7 @@ class ReportQuester():
                 #print('Send report request for message %s successfully' % (
                 #    msg['db_id']))
                 c += 1
-            time.sleep(0.6)
+            time.sleep(0.1)
         print('Send %s report-generated message successfully' % (c))
 
 
