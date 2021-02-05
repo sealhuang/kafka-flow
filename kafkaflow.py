@@ -619,8 +619,9 @@ def queue_writer(q):
 
 if __name__ == '__main__':
     # read configs
+    root_dir = os.path.dirname(os.path.abspath(__file__))
     envs = ConfigParser()
-    envs.read('./env.config')
+    envs.read(os.path.join(root_dir, 'env.config'))
 
     # create data queue for multiprocessing
     data_manager = multiprocessing.Manager()
