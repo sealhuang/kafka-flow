@@ -23,6 +23,10 @@ from kafka.errors import KafkaError, KafkaTimeoutError
 from weasyprint import HTML
 
 
+# global var: root_dir
+ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+
 class TimedRotatingCompressedFileHandler(TimedRotatingFileHandler):
     """Extended version of TimedRotatingFileHandler that compress 
     logs on rollover.
@@ -92,7 +96,7 @@ class KafkaReceiver(multiprocessing.Process):
 def get_json_logger(log_level=logging.DEBUG):
     """Logger initialization."""
     # init log dir
-    log_dir = os.path.join(os.path.curdir, 'log')
+    log_dir = os.path.join(ROOT_DIR, 'log')
     if not os.path.exists(log_dir):
         os.makedirs(log_dir, mode=0o755)
 
@@ -187,7 +191,9 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
     for k in sel_keys:
         result_data[k] = data_dict[k]
 
-    report_gallery = get_report_gallery()
+    report_gallery = get_report_gallery(
+        os.path.join(ROOT_DIR, 'report_gallery.config')
+    )
 
     if report_type not in report_gallery:
         uploaded_msg['status'] = 'error'
@@ -549,7 +555,7 @@ def save_msgs(msg_list, db_config):
             msg_list = err_list
         try:
             # init message dir
-            data_dir = os.path.join(os.path.curdir, 'msg_pool')
+            data_dir = os.path.join(ROOT_DIR, 'msg_pool')
             if not os.path.exists(data_dir):
                 os.makedirs(data_dir, mode=0o755)
 
@@ -619,9 +625,8 @@ def queue_writer(q):
 
 if __name__ == '__main__':
     # read configs
-    root_dir = os.path.dirname(os.path.abspath(__file__))
     envs = ConfigParser()
-    envs.read(os.path.join(root_dir, 'env.config'))
+    envs.read(os.path.join(ROOT_DIR, 'env.config'))
 
     # create data queue for multiprocessing
     data_manager = multiprocessing.Manager()
