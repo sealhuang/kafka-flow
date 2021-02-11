@@ -646,6 +646,8 @@ if __name__ == '__main__':
     )
     #-- initialize kafka message receiver process
     kafka_receiver = KafkaReceiver(envs['kafka'], fast_in_queue, in_queue)
+    # terminate the kafka-receiver when the main function exists
+    kafka_receiver.daemon = True
     kafka_receiver.start()
 
     #XXX for test: Create a message writer
