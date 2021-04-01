@@ -73,7 +73,7 @@ class KafkaReceiver(multiprocessing.Process):
             security_protocol = envs.get('security_protocol'),
             sasl_plain_username = envs.get('user'),
             sasl_plain_password = envs.get('pwd'),
-            bootstrap_servers = [envs.get('bootstrap_servers')],
+            bootstrap_servers = envs.get('bootstrap_servers').split(','),
             auto_offset_reset = envs.get('auto_offset_rst'),
         )
 
@@ -640,7 +640,7 @@ if __name__ == '__main__':
         security_protocol = envs.get('kafka', 'security_protocol'),
         sasl_plain_username = envs.get('kafka', 'user'),
         sasl_plain_password = envs.get('kafka', 'pwd'),
-        bootstrap_servers = [envs.get('kafka', 'bootstrap_servers')],
+        bootstrap_servers = envs.get('kafka', 'bootstrap_servers').split(','),
         value_serializer = lambda v: json.dumps(v).encode('utf-8'),
         retries = 5,
     )
