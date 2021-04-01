@@ -92,11 +92,23 @@ if __name__ == '__main__':
     if dbstatus=='err':
         exit()
 
-    # access real-time data changes in db
+    # watch data changes in db, and focus the specified collections
     watched_db = dbclient[dbconfig.get('watch_db')]
+    pipeline = [
+        {'$match': {
+            'ns.coll': {
+                '$in': [
+                    'assessToken',
+                    'whitelistItem',
+                    'examAticket',
+                    'echainAticket',
+                ]
+            }
+        }},
+    ]
     try:
         with watched_db.watch() as stream:
-            for line in watched_db.watch():
+            for line in watched_db.watch(pipeline=pipeline):
                 print(line)
     except pymongo.errors.PyMongoError as err:
         print(err)
