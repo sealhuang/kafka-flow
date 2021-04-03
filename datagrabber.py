@@ -96,7 +96,11 @@ def apply_changes(change, datapool):
             #'agent': change['fullDocument']['xxx'],
             'available_exam_type': change['fullDocument']['targetType'],
         }
-        item['available_exam'] = [
+        # XXX: to be confirmed
+        item['available_exam_id'] = [
+            ele['_id'] for ele in change['fullDocument']['targets']
+        ]
+        item['available_exam_name'] = [
             ele['title'] for ele in change['fullDocument']['targets']
         ]
         item['creator'] = change['fullDocument']['creator']['name']
@@ -108,7 +112,8 @@ def apply_changes(change, datapool):
 
     # changes in assessToken collection -- update token info
     elif ns_col=='assessToken' and op_type=='update':
-        pass
+        certificate_id = change['documentkey']['_id']
+
 
 
 
