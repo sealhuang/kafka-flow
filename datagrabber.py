@@ -89,7 +89,12 @@ def apply_changes(change, dbclient):
     ns_col = change['ns']['coll']
     op_type = change['operationType']
 
-    # apply changes in assessToken collection -- insert new token
+    # return vars
+    # apply_change_status: noChange, ok, or err
+    apply_change_status = 'noChange'
+    err_info = ''
+
+    # handle event of creating new token
     if ns_col=='assessToken' and op_type=='insert':
         item = {
             'certificate_type': 'token',
@@ -98,9 +103,9 @@ def apply_changes(change, dbclient):
             'usage_count': 0,
             'available_exam_type': change['fullDocument']['targetType'],
         }
-        item['available_exam'] = [
+        item['available_exam'] = '|'.join([
             ele['title'] for ele in change['fullDocument']['targets']
-        ]
+        ])
         item['creator'] = change['fullDocument']['creator']['name']
         item['create_time'] = datetime.fromtimestamp(
             change['fullDocument']['createTime']/1000
@@ -115,10 +120,17 @@ def apply_changes(change, dbclient):
         # TODO: add agent info
         #'agent': change['fullDocument']['xxx'],
         
-        # XXX: insert into collection
-        usage_stats_col.insert_one(item)
+        # insert into collection
+        insert_res = usage_stats_col.insert_one(item)
+        if isinstance(insert_res.inserted_id, bson.ObjectId):
+            apply_change_status = 'ok'
+        else:
+            apply_change_status = 'err'
+            err_info = 'Err while inserting new token: %s' % (
+                str(change['fullDocument'])
+            )
 
-    # changes in assessToken collection -- update taker info of token
+    # handle event of updating taker info of token
     elif ns_col=='assessToken' and op_type=='update':
         if 'taker' in change['updateDescription']['updatedFields']:
             certificate_id = str(change['documentkey']['_id'])
@@ -127,11 +139,50 @@ def apply_changes(change, dbclient):
             take_time = datetime.fromtimestamp(
                 change['updateDescription']['updatedFields']['lUTime']/1000
             )
-            # XXX: update db
-            usage_stats_col.update_one(
+            # update db
+            upres = usage_stats_col.update_one(
                     {'certificate_id': certificate_id},
                     {'$set': {'taker': taker_name, 'take_time': take_time}},
             )
+            if upres.modified_count==1:
+                apply_change_status = 'ok'
+            else:
+                apply_change_status = 'err'
+                err_info = 'Err while updating taker info - %s' % (
+                    str(change['updateDescription']['updatedFields'])
+                )
+
+    # handle event of creating new whitelist item
+    elif ns_col=='whitelistItem' and op_type=='insert':
+        item = {
+            'certificate_type': 'whitelist',
+            'certificate_id': str(change['fullDocument']['_id']),
+            'usage_count': 0,
+            'available_exam_type': change['fullDocument']['targetType'],
+            'available_exam': change['fullDocument']['target']['title'],
+            'creator': change['fullDocument']['creator']['name'],
+            'create_time': datetime.fromtimestamp(
+                change['fullDocument']['createTime']/1000
+            ),
+            'user_id': str(change['fullDocument']['member']['_id']),
+            # TODO: add usable flag
+            #'usable': True
+        }
+
+        # insert into collection
+        insert_res = usage_stats_col.insert_one(item)
+        if isinstance(insert_res.inserted_id, bson.ObjectId):
+            apply_change_status = 'ok'
+        else:
+            apply_change_status = 'err'
+            err_info = 'Err while inserting new whitelist item: %s' % (
+                str(change['fullDocument'])
+            )
+
+    # handle event of disable a whitelist item
+    elif ns_col=='whitelistItem' and op_type=='update':
+        # TODO: update usable field
+        pass
 
     # handle event of exchanging eChain assess ticket
     elif ns_col=='echainAticket' and op_type=='insert':
@@ -160,8 +211,14 @@ def apply_changes(change, dbclient):
                     #certificate_type = 'token'
 
         # TODO: add whitelist mode
-        else:
-            pass
+        elif 'whitelist_id' in raw_doc:
+            # assert the existence of the whitelist in usageStats collection
+            certificate_id = raw_doc['whitelist_id']
+            token_info = usage_stats_col.find_one({
+                'certificate_id': certificate_id
+            })
+            if isinstance(token_info, dict):
+                token_recorded = True
 
         if token_recorded:
             upfields = {
@@ -192,11 +249,18 @@ def apply_changes(change, dbclient):
                 if 'executiveClass' in raw_doc['studyingStatus']:
                     upfields['class'] = raw_doc['studyingStatus']['executiveClass']
 
-            # XXX: update db
-            usage_stats_col.update_one(
-                    {'certificate_id': certificate_id},
-                    {'$set': upfields},
+            # update db
+            upres = usage_stats_col.update_one(
+                {'certificate_id': certificate_id},
+                {'$set': upfields},
             )
+            if upres.modified_count==1:
+                apply_change_status = 'ok'
+            else:
+                apply_change_status = 'err'
+                err_info = 'Err while adding ticket info - %s' % (
+                    str(raw_doc)
+                )
                 
     # handle event of modifying user info
     elif ns_col=='echainAticket' and op_type=='update':
@@ -227,11 +291,18 @@ def apply_changes(change, dbclient):
                     if 'executiveClass' in raw_doc['studyingStatus']:
                         upfields['class'] = raw_doc['studyingStatus']['executiveClass']
 
-                # XXX: update db
-                usage_stats_col.update_one(
+                # update db
+                upres = usage_stats_col.update_one(
                     {'ticket_id': ticket_id},
                     {'$set': upfields},
                 )
+                if upres.modified_count==1:
+                    apply_change_status = 'ok'
+                else:
+                    apply_change_status = 'err'
+                    err_info = 'Err while updating ticket info - %s' % (
+                        str(raw_doc)
+                    )
 
     # handle event of exchanging exam assess ticket
     elif ns_col=='examAticket' and op_type=='insert':
@@ -260,8 +331,14 @@ def apply_changes(change, dbclient):
                     #certificate_type = 'token'
 
         # TODO: add whitelist mode
-        elif 'assessToken' not in raw_doc and 'echainAticket' not in raw_doc:
-            pass
+        elif 'whitelist_id' in raw_doc:
+            # assert the existence of the whitelist in usageStats collection
+            certificate_id = raw_doc['whitelist_id']
+            token_info = usage_stats_col.find_one({
+                'certificate_id': certificate_id
+            })
+            if isinstance(token_info, dict):
+                token_recorded = True
 
         if token_recorded:
             upfields = {
@@ -292,11 +369,18 @@ def apply_changes(change, dbclient):
                 if 'executiveClass' in raw_doc['studyingStatus']:
                     upfields['class'] = raw_doc['studyingStatus']['executiveClass']
 
-            # XXX: update db
-            usage_stats_col.update_one(
-                    {'certificate_id': certificate_id},
-                    {'$set': upfields},
+            # update db
+            upres = usage_stats_col.update_one(
+                {'certificate_id': certificate_id},
+                {'$set': upfields},
             )
+            if upres.modified_count==1:
+                apply_change_status = 'ok'
+            else:
+                apply_change_status = 'err'
+                err_info = 'Err while adding ticket info - %s' % (
+                    str(raw_doc)
+                )
 
     # handle event of modifying user info
     elif ns_col=='examAticket' and op_type=='update':
@@ -327,12 +411,20 @@ def apply_changes(change, dbclient):
                     if 'executiveClass' in raw_doc['studyingStatus']:
                         upfields['class'] = raw_doc['studyingStatus']['executiveClass']
 
-                # XXX: update db
-                usage_stats_col.update_one(
+                # update db
+                upres = usage_stats_col.update_one(
                     {'ticket_id': ticket_id},
                     {'$set': upfields},
                 )
+                if upres.modified_count==1:
+                    apply_change_status = 'ok'
+                else:
+                    apply_change_status = 'err'
+                    err_info = 'Err while updating ticket info - %s' % (
+                        str(raw_doc)
+                    )
 
+    return apply_change_status, err_info
 
 
 
@@ -387,7 +479,12 @@ if __name__ == '__main__':
                         # if get changes
                         if change is not None:
                             print(change)
-                            apply_changes(change, dbclient)
+                            apply_change_status, err_info = apply_changes(
+                                change,
+                                dbclient,
+                            )
+                            if apply_change_status=='err':
+                                json_logger.error('"rest":"%s"'%(err_info))
                             continue
 
                         # if there are no recent changes, sleep for a while
