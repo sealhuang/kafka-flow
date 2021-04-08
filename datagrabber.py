@@ -83,7 +83,7 @@ def apply_changes(change, dbclient):
     usage_stats_col = datapool['examUsageStats']
     # auxiliarytoken collection is used for search assess-token ID based on
     # assess code and the used exam/exam-chain ID.
-    auxiliarytoken_col = dbclient['examstation']['auxiliarytoken']
+    auxiliarytoken_col = dbclient[dbconfig.get('watch_db')]['auxiliarytoken']
 
     ns_db = change['ns']['db']
     ns_col = change['ns']['coll']
