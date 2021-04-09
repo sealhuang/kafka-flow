@@ -165,8 +165,6 @@ def apply_changes(change, dbclient):
                 change['fullDocument']['createTime']/1000
             ),
             'user_id': str(change['fullDocument']['member']['_id']),
-            # TODO: add usable flag
-            #'usable': True
         }
 
         # insert into collection
@@ -178,11 +176,6 @@ def apply_changes(change, dbclient):
             err_info = 'Err while inserting new whitelist item: %s' % (
                 str(change['fullDocument'])
             )
-
-    # handle event of disable a whitelist item
-    elif ns_col=='whitelistItem' and op_type=='update':
-        # TODO: update usable field
-        pass
 
     # handle event of exchanging eChain assess ticket
     elif ns_col=='echainAticket' and op_type=='insert':
@@ -211,9 +204,9 @@ def apply_changes(change, dbclient):
                     #certificate_type = 'token'
 
         # TODO: add whitelist mode
-        elif 'whitelist_id' in raw_doc:
+        elif 'whiteListItemId' in raw_doc:
             # assert the existence of the whitelist in usageStats collection
-            certificate_id = raw_doc['whitelist_id']
+            certificate_id = raw_doc['whiteListItemId']
             token_info = usage_stats_col.find_one({
                 'certificate_id': certificate_id
             })
@@ -331,9 +324,9 @@ def apply_changes(change, dbclient):
                     #certificate_type = 'token'
 
         # TODO: add whitelist mode
-        elif 'whitelist_id' in raw_doc:
+        elif 'whiteListItemId' in raw_doc:
             # assert the existence of the whitelist in usageStats collection
-            certificate_id = raw_doc['whitelist_id']
+            certificate_id = raw_doc['whiteListItemId']
             token_info = usage_stats_col.find_one({
                 'certificate_id': certificate_id
             })
