@@ -7,12 +7,11 @@ import time
 from datetime import datetime
 import logging
 from configparser import ConfigParser
-from urllib.parse import quote_plus
 import pymongo
 #from pymongo import UpdateOne, ReplaceOne
 
 from loghandler import TimedRotatingCompressedFileHandler
-
+from utils import conn2db
 
 # global var: root_dir
 ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -51,31 +50,6 @@ def get_logger(log_level=logging.DEBUG):
 
     return logger
 
-def conn2db(dbconfig):
-    """Connect to mongoDB."""
-    if dbconfig.get('user')=='XXX':
-        user = ''
-        pwd = ''
-    else:
-        user = dbconfig.get('user')
-        pwd = dbconfig.get('pwd')
-
-    user_info = ':'.join([quote_plus(item) for item in [user, pwd] if item])
-    if user_info:
-        user_info = user_info + '@'
-    url = 'mongodb://%s%s' % (user_info, dbconfig.get('url'))
-    #print(url)
-    dbclient = pymongo.MongoClient(url)
-
-    # check if the client is valid
-    try:
-        dbclient.server_info()
-        print('Connect to db successfully.')
-        return 'ok', dbclient
-    except pymongo.errors.ServerSelectionTimeoutError as err:
-        print(err)
-        return 'err', dbclient
-
 def apply_changes(change, dbclient):
     """Apply data changes to datapool."""
     # config collections in datapool DB
@@ -83,7 +57,7 @@ def apply_changes(change, dbclient):
     usage_stats_col = datapool['examUsageStats']
     # auxiliarytoken collection is used for search assess-token ID based on
     # assess code and the used exam/exam-chain ID.
-    auxiliarytoken_col = dbclient[dbconfig.get('watch_db')]['auxiliarytoken']
+    auxiliarytoken_col = dbclient[dbconfig.get('exams_db')]['auxiliarytoken']
 
     ns_db = change['ns']['db']
     ns_col = change['ns']['coll']
@@ -443,7 +417,7 @@ if __name__ == '__main__':
             json_logger.info('"rest":"Connect to db successfully"')
 
             # watch data changes in db, and focus the specified collections
-            watched_db = dbclient[dbconfig.get('watch_db')]
+            watched_db = dbclient[dbconfig.get('exams_db')]
 
             pipeline = [
                 {'$match': {
