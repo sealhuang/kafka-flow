@@ -21,6 +21,8 @@ import oss2
 from kafka import KafkaConsumer, KafkaProducer
 from kafka.errors import KafkaError, KafkaTimeoutError
 from weasyprint import HTML
+from cachetools import cached, TTLCache
+from cachetools.keys import hashkey
 
 from utils import conn2db
 
@@ -627,6 +629,59 @@ def get_domain_tags(question_db):
 
     return domain_tags
 
+@cached(
+    cache=TTLCache(maxsize=512, ttl=900),
+    key=lambda qtitle, qdb: hashkey(qtitle),
+)
+def get_question_infos(qtitle, qdb):
+    """Get question info from db."""
+    # get questions' domain tags first
+    tag_col = qdb['questionTag']
+    all_tags = {}
+    for item in tag_col.find({'parent': {'$exists': True}}):
+        all_tags[str(item['_id'])] = (item['title'], item['parent'])
+    # get all domain tags
+    domain_tags = {}
+    for idx in all_tags:
+        full_tags = _get_full_tags(idx, all_tags, [])
+        if full_tags[-1]=='维度':
+            full_tags.reverse()
+            domain_tags[idx] = '-'.join(full_tags)
+
+    # get question info
+    question_col = qdb['Question']
+    # handle composite questions
+    title_parts = qtitle.split('-')
+    title = title_parts[0]
+    subpaths = title_parts[1:]
+    raw_info = question_col.find_one({'title': title})
+    try:
+        qinfo = {}
+        # get domain tags
+        qinfo['tags'] = []
+        for item in raw_info['tags']:
+            if ('subPath' not in item) or \
+                ('-'.join(subpaths) in item['subPath']):
+                if str(item['_id']) in domain_tags:
+                    qinfo['tags'].append(domain_tags[str(item['_id'])])
+
+        # get other properties
+        qinfo['features'] = {}
+        if not raw_info['difficulty']==0.0:
+            qinfo['features']['difficulty'] = raw_info['difficulty']
+        _qunit = raw_info['compositeQunit']
+        for sp in subpaths:
+            _qunit = _qunit['subQunits'][int(sp)-1]
+        for k in _qunit['extFeatures']:
+            qinfo['features'][k] = _qunit['extFeatures'][k]['value']
+
+        return qinfo 
+
+    except:
+        print('Err while fetching info of %s'%(qtitle))
+        return None
+
+
 
 def queue_writer(q):
     """For test."""
@@ -661,8 +716,27 @@ if __name__ == '__main__':
     if not dbstatus=='ok':
         print('Err while connecting to db.')
         exit()
-    # initialize question tag info
-    domain_tags = get_domain_tags(dbclient[db_config.get('question_db')])
+
+    questions = [
+        'leveledReading_articleComprehensionCore_overallPerception_175',
+        'leveledReading_articleComprehensionCore_inference_173-1',
+        'informationLiteracy_acquire_10-1-1',
+        'informationLiteracy_acquire_10-1-2',
+        'informationLiteracy_acquire_10-1-5',
+        'leveledReading_articleComprehensionCore_inference_173-1',
+        'leveledReading_articleComprehensionCore_overallPerception_175',
+        'informationLiteracy_acquire_10-1-5',
+        'leveledReading_articleComprehensionCore_infoExtraction_103-1',
+        'leveledReading_articleComprehensionCore_infoExtraction_103-2',
+    ]
+    for qtitle in questions:
+        print('*'*10)
+        print(qtitle)
+        st = time.time()
+        qinfo = get_question_infos(qtitle, dbclient[db_config.get('question_db')])
+        print(time.time()-st)
+        if isinstance(qinfo, dict):
+            print(qinfo)
 
     ## create data queue for multiprocessing
     #data_manager = multiprocessing.Manager()
