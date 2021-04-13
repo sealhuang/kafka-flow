@@ -73,6 +73,7 @@ class KafkaReceiver(multiprocessing.Process):
             group_id = envs.get('rec_grp'),
             # enable_auto_commit=True,
             # auto_commit_interval_ms=2,
+            #api_version = (0, 10),
             sasl_mechanism = envs.get('sasl_mechanism'),
             security_protocol = envs.get('security_protocol'),
             sasl_plain_username = envs.get('user'),
@@ -90,11 +91,15 @@ class KafkaReceiver(multiprocessing.Process):
         for msg in self.consumer:
             line = msg.value.decode('utf-8').strip()
             #print(line)
-            _msg = json.loads(line)
-            if 'priority' in _msg and _msg['priority']=='low':
-                self.queue.put(line)
-            else:
-                self.fast_queue.put(line)
+            try:
+                _msg = json.loads(line)
+                if 'priority' in _msg and _msg['priority']=='low':
+                    self.queue.put(line)
+                else:
+                    self.fast_queue.put(line)
+            except:
+                print('Receive invalid message')
+                print(line)
 
 
 def get_json_logger(log_level=logging.DEBUG):
