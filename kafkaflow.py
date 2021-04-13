@@ -716,34 +716,35 @@ if __name__ == '__main__':
     if not dbstatus=='ok':
         print('Err while connecting to db.')
         exit()
+ 
+    # get question infos
+    #questions = [
+    #    'leveledReading_articleComprehensionCore_overallPerception_175',
+    #    'leveledReading_articleComprehensionCore_inference_173-1',
+    #    'informationLiteracy_acquire_10-1-1',
+    #    'informationLiteracy_acquire_10-1-2',
+    #    'informationLiteracy_acquire_10-1-5',
+    #    'leveledReading_articleComprehensionCore_inference_173-1',
+    #    'leveledReading_articleComprehensionCore_overallPerception_175',
+    #    'informationLiteracy_acquire_10-1-5',
+    #    'leveledReading_articleComprehensionCore_infoExtraction_103-1',
+    #    'leveledReading_articleComprehensionCore_infoExtraction_103-2',
+    #]
+    #for qtitle in questions:
+    #    print('*'*10)
+    #    print(qtitle)
+    #    st = time.time()
+    #    qinfo = get_question_infos(qtitle, dbclient[db_config.get('question_db')])
+    #    print(time.time()-st)
+    #    if isinstance(qinfo, dict):
+    #        print(qinfo)
 
-    questions = [
-        'leveledReading_articleComprehensionCore_overallPerception_175',
-        'leveledReading_articleComprehensionCore_inference_173-1',
-        'informationLiteracy_acquire_10-1-1',
-        'informationLiteracy_acquire_10-1-2',
-        'informationLiteracy_acquire_10-1-5',
-        'leveledReading_articleComprehensionCore_inference_173-1',
-        'leveledReading_articleComprehensionCore_overallPerception_175',
-        'informationLiteracy_acquire_10-1-5',
-        'leveledReading_articleComprehensionCore_infoExtraction_103-1',
-        'leveledReading_articleComprehensionCore_infoExtraction_103-2',
-    ]
-    for qtitle in questions:
-        print('*'*10)
-        print(qtitle)
-        st = time.time()
-        qinfo = get_question_infos(qtitle, dbclient[db_config.get('question_db')])
-        print(time.time()-st)
-        if isinstance(qinfo, dict):
-            print(qinfo)
-
-    ## create data queue for multiprocessing
-    #data_manager = multiprocessing.Manager()
-    #fast_in_queue = data_manager.Queue(envs.getint('general', 'in_queue_size'))
-    #in_queue = data_manager.Queue(envs.getint('general', 'in_queue_size'))
-    #out_queue = data_manager.Queue(envs.getint('general', 'out_queue_size'))
-    #cache_queue = data_manager.Queue(envs.getint('general', 'cache_queue_size'))
+    # create data queue for multiprocessing
+    data_manager = multiprocessing.Manager()
+    fast_in_queue = data_manager.Queue(envs.getint('general', 'in_queue_size'))
+    in_queue = data_manager.Queue(envs.getint('general', 'in_queue_size'))
+    out_queue = data_manager.Queue(envs.getint('general', 'out_queue_size'))
+    cache_queue = data_manager.Queue(envs.getint('general', 'cache_queue_size'))
 
     #kafka_sender = KafkaProducer(
     #    sasl_mechanism = envs.get('kafka', 'sasl_mechanism'),
