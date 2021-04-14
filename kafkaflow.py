@@ -618,30 +618,11 @@ def _get_full_tags(idx, all_tags, full_tags):
     else:
         return full_tags
 
-def get_domain_tags(question_db):
-    """Get questions' DOMAIN tags."""
-    tag_col = question_db['questionTag']
-    all_tags = {}
-    for item in tag_col.find({'parent': {'$exists': True}}):
-        all_tags[str(item['_id'])] = (item['title'], item['parent'])
-    # get all domain tags
-    domain_tags = {}
-    for idx in all_tags:
-        full_tags = _get_full_tags(idx, all_tags, [])
-        if full_tags[-1]=='维度':
-            full_tags.reverse()
-            domain_tags[idx] = '-'.join(full_tags)
-
-    return domain_tags
-
-@cached(
-    cache=TTLCache(maxsize=512, ttl=900),
-    key=lambda qtitle, qdb: hashkey(qtitle),
-)
-def get_question_infos(qtitle, qdb):
-    """Get question info from db."""
+@cached(cache=TTLCache(maxsize=512, ttl=900), key=lambda ttl, db: hashkey(ttl))
+def get_question_infos(ttl, db):
+    """Get question info from db indexed by question title."""
     # get questions' domain tags first
-    tag_col = qdb['questionTag']
+    tag_col = db['questionTag']
     all_tags = {}
     for item in tag_col.find({'parent': {'$exists': True}}):
         all_tags[str(item['_id'])] = (item['title'], item['parent'])
@@ -654,38 +635,37 @@ def get_question_infos(qtitle, qdb):
             domain_tags[idx] = '-'.join(full_tags)
 
     # get question info
-    question_col = qdb['Question']
+    question_col = db['Question']
     # handle composite questions
-    title_parts = qtitle.split('-')
+    title_parts = ttl.split('-')
     title = title_parts[0]
     subpaths = title_parts[1:]
     raw_info = question_col.find_one({'title': title})
     try:
         qinfo = {}
         # get domain tags
-        qinfo['tags'] = []
+        qinfo['tags_'+ttl] = []
         for item in raw_info['tags']:
             if ('subPath' not in item) or \
                 ('-'.join(subpaths) in item['subPath']):
                 if str(item['_id']) in domain_tags:
-                    qinfo['tags'].append(domain_tags[str(item['_id'])])
+                    qinfo['tags_'+ttl].append(domain_tags[str(item['_id'])])
 
         # get other properties
-        qinfo['features'] = {}
+        qinfo['attr_'+ttl] = {}
         if not raw_info['difficulty']==0.0:
-            qinfo['features']['difficulty'] = raw_info['difficulty']
+            qinfo['attr_'+ttl]['difficulty'] = raw_info['difficulty']
         _qunit = raw_info['compositeQunit']
         for sp in subpaths:
             _qunit = _qunit['subQunits'][int(sp)-1]
         for k in _qunit['extFeatures']:
-            qinfo['features'][k] = _qunit['extFeatures'][k]['value']
+            qinfo['attr_'+ttl][k] = _qunit['extFeatures'][k]['value']
 
         return qinfo 
 
     except:
-        print('Err while fetching info of %s'%(qtitle))
+        print('Err while fetching info of %s'%(ttl))
         return None
-
 
 
 def queue_writer(q):
@@ -695,17 +675,12 @@ def queue_writer(q):
         flag = random.randint(1, 51)
         if flag>28:
             msg = {
-                'reportType': 'mathDiagnosisK8_v1',
-                'data': '',
+                'ticketID': '000'+str(i),
+                'priority': 'low',
             }
         else:
             msg = {
-                'reportType': 'mathDiagnosisK8_v1',
-                'data': {
-                    'ticketID': '00'+str(i),
-                    'var1': 1,
-                    'var2': 2,
-                },
+                'ticketID': '00',+str(i)
             }
         q.put(json.dumps(msg))
 
@@ -751,36 +726,36 @@ if __name__ == '__main__':
     out_queue = data_manager.Queue(envs.getint('general', 'out_queue_size'))
     cache_queue = data_manager.Queue(envs.getint('general', 'cache_queue_size'))
 
-    #kafka_sender = KafkaProducer(
-    #    sasl_mechanism = envs.get('kafka', 'sasl_mechanism'),
-    #    security_protocol = envs.get('kafka', 'security_protocol'),
-    #    sasl_plain_username = envs.get('kafka', 'user'),
-    #    sasl_plain_password = envs.get('kafka', 'pwd'),
-    #    bootstrap_servers = envs.get('kafka', 'bootstrap_servers').split(','),
-    #    value_serializer = lambda v: json.dumps(v).encode('utf-8'),
-    #    retries = 5,
-    #)
-    ##-- initialize kafka message receiver process
-    #kafka_receiver = KafkaReceiver(envs['kafka'], fast_in_queue, in_queue)
-    #kafka_receiver.start()
+    kafka_sender = KafkaProducer(
+        sasl_mechanism = envs.get('kafka', 'sasl_mechanism'),
+        security_protocol = envs.get('kafka', 'security_protocol'),
+        sasl_plain_username = envs.get('kafka', 'user'),
+        sasl_plain_password = envs.get('kafka', 'pwd'),
+        bootstrap_servers = envs.get('kafka', 'bootstrap_servers').split(','),
+        value_serializer = lambda v: json.dumps(v).encode('utf-8'),
+        retries = 5,
+    )
+    #-- initialize kafka message receiver process
+    kafka_receiver = KafkaReceiver(envs['kafka'], fast_in_queue, in_queue)
+    kafka_receiver.start()
 
-    ##XXX for test: Create a message writer
-    ##multiprocessing.Process(target=queue_writer, args=(in_queue,)).start()
+    #XXX for test: Create a message writer
+    #multiprocessing.Process(target=queue_writer, args=(in_queue,)).start()
 
-    ## connect to aliyun oss
-    #bucket = conn2aliyun(envs['aliyun'])
-    #base_url = '.'.join([
-    #    envs.get('aliyun', 'oss_bucket_name'),
-    #    envs.get('aliyun', 'oss_endpoint_name'),
-    #])
-    #dummy_base_url = envs.get('aliyun', 'dummy_oss_url')
+    # connect to aliyun oss
+    bucket = conn2aliyun(envs['aliyun'])
+    base_url = '.'.join([
+        envs.get('aliyun', 'oss_bucket_name'),
+        envs.get('aliyun', 'oss_endpoint_name'),
+    ])
+    dummy_base_url = envs.get('aliyun', 'dummy_oss_url')
 
-    ## Create multiprocessing pool to process data
-    #max_worker_num = envs.getint('general', 'mp_worker_num')
-    #pool = multiprocessing.Pool(max_worker_num)
+    # Create multiprocessing pool to process data
+    max_worker_num = envs.getint('general', 'mp_worker_num')
+    pool = multiprocessing.Pool(max_worker_num)
 
-    ## logging
-    #json_logger = get_json_logger()
+    # logging
+    json_logger = get_json_logger()
 
     ## generate report
     #cache_max_time = envs.getint('general', 'cache_max_time')
