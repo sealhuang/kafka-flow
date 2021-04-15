@@ -2,6 +2,7 @@
 
 import os
 import json
+import bson
 import datetime
 import random
 import time
@@ -15,7 +16,6 @@ from logging.handlers import TimedRotatingFileHandler
 import pymongo
 from pymongo import UpdateOne, ReplaceOne
 from urllib.parse import quote_plus
-import bson
 
 import oss2
 from kafka import KafkaConsumer, KafkaProducer
@@ -93,6 +93,7 @@ class KafkaReceiver(multiprocessing.Process):
             #print(line)
             try:
                 _msg = json.loads(line)
+                assert 'ticketiID' in _msg
                 if 'priority' in _msg and _msg['priority']=='low':
                     self.queue.put(line)
                 else:
@@ -644,12 +645,12 @@ def get_question_infos(ttl, db):
     try:
         qinfo = {}
         # get domain tags
-        qinfo['tags_'+ttl] = []
+        qinfo['d_'+ttl] = []
         for item in raw_info['tags']:
             if ('subPath' not in item) or \
                 ('-'.join(subpaths) in item['subPath']):
                 if str(item['_id']) in domain_tags:
-                    qinfo['tags_'+ttl].append(domain_tags[str(item['_id'])])
+                    qinfo['d_'+ttl].append(domain_tags[str(item['_id'])])
 
         # get other properties
         qinfo['attr_'+ttl] = {}
@@ -696,6 +697,11 @@ if __name__ == '__main__':
     if not dbstatus=='ok':
         print('Err while connecting to db.')
         exit()
+
+    # datapool db config
+    pool_db = dbclient[db_config.get('pool_db')]
+    ans_coll = pool_db[db_config.get('answer_sheet_collection')]
+    res_coll = pool_db[db_config.get('result_collection')]
  
     # get question infos
     #questions = [
@@ -757,160 +763,173 @@ if __name__ == '__main__':
     # logging
     json_logger = get_json_logger()
 
-    ## generate report
-    #cache_max_time = envs.getint('general', 'cache_max_time')
-    #last_time = time.time()
-    #while True:
-    #    on_duty = False
+    # generate report
+    cache_max_time = envs.getint('general', 'cache_max_time')
+    last_time = time.time()
+    while True:
+        on_duty = False
 
-    #    # save messages to db or file
-    #    if (not cache_queue.empty()) and \
-    #       (cache_queue.full() or ((time.time()-last_time) > cache_max_time)):
-    #        msg_list = []
-    #        while not cache_queue.empty():
-    #            msg_list.append(cache_queue.get())
-    #        save_ret = save_msgs(msg_list, envs['mongodb'])
-    #        if save_ret=='msg2db_ok':
-    #            json_logger.info('"rest":"Save msgs to db successfully"')
-    #        elif save_ret=='msg2file_ok':
-    #            json_logger.info('"rest":"Save msgs to file successfully"')
-    #        elif save_ret=='msg2db_err':
-    #            json_logger.error('"rest":"Error while save msgs to db"')
-    #        elif save_ret=='msg2file_err':
-    #            json_logger.error('"rest":"Error while save msgs to file"')
+        # save messages to db or file
+        if (not cache_queue.empty()) and \
+           (cache_queue.full() or ((time.time()-last_time) > cache_max_time)):
+            msg_list = []
+            while not cache_queue.empty():
+                msg_list.append(cache_queue.get())
+            save_ret = save_msgs(msg_list, envs['mongodb'])
+            if save_ret=='msg2db_ok':
+                json_logger.info('"rest":"Save msgs to db successfully"')
+            elif save_ret=='msg2file_ok':
+                json_logger.info('"rest":"Save msgs to file successfully"')
+            elif save_ret=='msg2db_err':
+                json_logger.error('"rest":"Error while save msgs to db"')
+            elif save_ret=='msg2file_err':
+                json_logger.error('"rest":"Error while save msgs to file"')
 
-    #        last_time = time.time()
-    #        on_duty = True
+            last_time = time.time()
+            on_duty = True
 
-    #    # handle process results
-    #    if not out_queue.empty():
-    #        msg = out_queue.get()
-    #        callback_flag = msg.pop('callback')
-    #        if not callback_flag:
-    #            continue
-    #        #normalize_ret_dict(msg)
-    #        #print(msg)
-    #        if msg['status']=='ok':
-    #            try:
-    #                future = kafka_sender.send(
-    #                    envs.get('kafka', 'send_topic'),
-    #                    msg,
-    #                )
-    #                record_metadata = future.get(timeout=30)
-    #                assert future.succeeded()
-    #            except KafkaTimeoutError as kte:
-    #                json_logger.error(
-    #                    '"rest":"Timeout while sending message - %s"'%(str(msg)),
-    #                    exc_info=True,
-    #                )
-    #            except KafkaError as ke:
-    #                json_logger.error(
-    #                    '"rest":"KafkaError while sending message - %s"'%(str(msg)),
-    #                    exc_info=True,
-    #                )
-    #            except:
-    #                #print('Error!')
-    #                #print(msg)
-    #                json_logger.error(
-    #                    '"rest":"Exception while sending message - %s"'%(str(msg)),
-    #                    exc_info=True,
-    #                )
-    #            else:
-    #                json_logger.info(
-    #                    '"rest":"Generate report successfully - %s"'%(str(msg)),
-    #                )
+        # handle process results
+        if not out_queue.empty():
+            msg = out_queue.get()
+            callback_flag = msg.pop('callback')
+            if not callback_flag:
+                continue
+            #normalize_ret_dict(msg)
+            #print(msg)
+            if msg['status']=='ok':
+                try:
+                    future = kafka_sender.send(
+                        envs.get('kafka', 'send_topic'),
+                        msg,
+                    )
+                    record_metadata = future.get(timeout=30)
+                    assert future.succeeded()
+                except KafkaTimeoutError as kte:
+                    json_logger.error(
+                        '"rest":"Timeout while sending message - %s"'%(str(msg)),
+                        exc_info=True,
+                    )
+                except KafkaError as ke:
+                    json_logger.error(
+                        '"rest":"KafkaError while sending message - %s"'%(str(msg)),
+                        exc_info=True,
+                    )
+                except:
+                    #print('Error!')
+                    #print(msg)
+                    json_logger.error(
+                        '"rest":"Exception while sending message - %s"'%(str(msg)),
+                        exc_info=True,
+                    )
+                else:
+                    json_logger.info(
+                        '"rest":"Generate report successfully - %s"'%(str(msg)),
+                    )
 
-    #        else:
-    #            #print(msg)
-    #            json_logger.error(
-    #                '"rest":"Error while printing","args":"%s"' %
-    #                (msg['args'].replace('\n', ';').replace('"', "'")),
-    #            )
-    #            print('*'*20)
-    #            print('Error while printing!\nArgs:')
-    #            print(msg['args'])
-    #            print('Err:')
-    #            print(msg['stderr'])
+            else:
+                #print(msg)
+                json_logger.error(
+                    '"rest":"Error while printing","args":"%s"' %
+                    (msg['args'].replace('\n', ';').replace('"', "'")),
+                )
+                print('*'*20)
+                print('Error while printing!\nArgs:')
+                print(msg['args'])
+                print('Err:')
+                print(msg['stderr'])
 
-    #        on_duty = True
+            on_duty = True
 
-    #    # process new message
-    #    if (pool._taskqueue.qsize() <= (3*max_worker_num)) and \
-    #       (not in_queue.empty() or not fast_in_queue.empty()):
-    #        if not fast_in_queue.empty():
-    #            raw_msg = fast_in_queue.get()
-    #        else:
-    #            raw_msg = in_queue.get()
-    #        msg = json.loads(raw_msg)
-    #        if 'priority' in msg:
-    #            msg.pop('priority')
-    #        #print(msg)
+        # process new message
+        if (pool._taskqueue.qsize() <= (3*max_worker_num)) and \
+           (not in_queue.empty() or not fast_in_queue.empty()):
+            if not fast_in_queue.empty():
+                raw_msg = fast_in_queue.get()
+            else:
+                raw_msg = in_queue.get()
+            msg = json.loads(raw_msg)
+            if 'priority' in msg:
+                msg.pop('priority')
+            #print(msg)
 
-    #        # validate received data
-    #        if not msg['data']:
-    #            json_logger.info('"rest":"No data found in %s"'%(str(msg)))
-    #            #print('Not find data in message.')
-    #            continue
-    #        try:
-    #            msg['data'] = eval(msg['data'])
-    #        except:
-    #            json_logger.error('"rest":"Get invalid data - %s"'%(str(msg)))
-    #            continue
+            # XXX: get answer sheet from db
+            ans_item = ans_coll.find_one({
+                'ticketID': bson.ObjectId(msg['ticketID'])
+            })
+            if not isinstance(ans_item, dict):
+                json_logger.error(
+                    '"rest":"Not fetch valid answer sheet (ticketID %s)"' %
+                        (msg['ticketID'])
+                )
+                continue
 
-    #        # get report type and the data objectives
-    #        if not msg['reportType']:
-    #            json_logger.info(
-    #                '"rest": "Get unrelated message - %s"'%(str(msg))
-    #            )
-    #            continue
+            # TODO: change msg to ans_item
 
-    #        if '|' in msg['reportType']:
-    #            report_type, data_purpose = msg['reportType'].split('|')
-    #        elif 'dataObjective' in msg:
-    #            report_type = msg['reportType']
-    #            data_purpose = msg['dataObjective']
-    #        else:
-    #            report_type = msg['reportType']
-    #            data_purpose = 'REPORT'
+            # validate received data
+            if not msg['data']:
+                json_logger.info('"rest":"No data found in %s"'%(str(msg)))
+                #print('Not find data in message.')
+                continue
+            try:
+                msg['data'] = eval(msg['data'])
+            except:
+                json_logger.error('"rest":"Get invalid data - %s"'%(str(msg)))
+                continue
 
-    #        # if we get a test message
-    #        if report_type=='test':
-    #            json_logger.info('"rest":"Get test message - %s"'%(str(msg)))
-    #            continue
+            # get report type and the data objectives
+            if not msg['reportType']:
+                json_logger.info(
+                    '"rest": "Get unrelated message - %s"'%(str(msg))
+                )
+                continue
 
-    #        # normalize message structure
-    #        msg['reportType'] = report_type
-    #        msg['dataObjective'] = data_purpose
-    #        msg['reportProcessStatus'] = 'OK'
-    #        if 'receivedTime' not in msg:
-    #            ts = datetime.datetime.strftime(
-    #                datetime.datetime.now(),
-    #                '%Y%m%d%H%M%S',
-    #            )
-    #            msg['receivedTime'] = ts
-    #        # key `dataType` is used for choosing which collection the
-    #        # message should be saved
-    #        msg['dataType'] = 'raw_msgs'
+            if '|' in msg['reportType']:
+                report_type, data_purpose = msg['reportType'].split('|')
+            elif 'dataObjective' in msg:
+                report_type = msg['reportType']
+                data_purpose = msg['dataObjective']
+            else:
+                report_type = msg['reportType']
+                data_purpose = 'REPORT'
 
-    #        # if the objective of the message is `store`
-    #        if data_purpose=='STORE':
-    #            cache_queue.put(msg)
-    #            continue
+            # if we get a test message
+            if report_type=='test':
+                json_logger.info('"rest":"Get test message - %s"'%(str(msg)))
+                continue
 
-    #        pool.apply_async(
-    #            generate_report,
-    #            (
-    #                msg,
-    #                out_queue,
-    #                cache_queue,
-    #                bucket,
-    #                base_url,
-    #                dummy_base_url,
-    #            ),
-    #        )
+            # normalize message structure
+            msg['reportType'] = report_type
+            msg['dataObjective'] = data_purpose
+            msg['reportProcessStatus'] = 'OK'
+            if 'receivedTime' not in msg:
+                ts = datetime.datetime.strftime(
+                    datetime.datetime.now(),
+                    '%Y%m%d%H%M%S',
+                )
+                msg['receivedTime'] = ts
+            # key `dataType` is used for choosing which collection the
+            # message should be saved
+            msg['dataType'] = 'raw_msgs'
 
-    #        on_duty = True
+            # if the objective of the message is `store`
+            if data_purpose=='STORE':
+                cache_queue.put(msg)
+                continue
 
-    #    if not on_duty:
-    #        time.sleep(0.01)
+            pool.apply_async(
+                generate_report,
+                (
+                    msg,
+                    out_queue,
+                    cache_queue,
+                    bucket,
+                    base_url,
+                    dummy_base_url,
+                ),
+            )
+
+            on_duty = True
+
+        if not on_duty:
+            time.sleep(0.01)
 

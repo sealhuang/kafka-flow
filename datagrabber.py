@@ -76,24 +76,27 @@ def apply_changes(change, dbclient):
             'certificate_id': str(change['fullDocument']['_id']),
             'usage_count': 0,
             'available_exam_type': change['fullDocument']['targetType'],
+            'project': change['fullDocument']['assessTokenTagBrief']['title'],
         }
         item['available_exam'] = '|'.join([
             ele['title'] for ele in change['fullDocument']['targets']
         ])
-        item['creator'] = change['fullDocument']['creator']['name']
+        if 'name' in change['fullDocument']['creator']:
+            item['creator'] = change['fullDocument']['creator']['name']
+        else:
+            item['creator'] = str(change['fullDocument']['creator']['_id'])
+
         item['create_time'] = datetime.fromtimestamp(
             change['fullDocument']['createTime']/1000
         )
         # TODO: add taker info
-        if 'taker' in change['fullDocument']:
-            if 'name' in change['fullDocument']['taker']:
-                item['taker'] = change['fullDocument']['taker']['name']
-                item['take_time'] = datetime.fromtimestamp(
-                    change['fullDocument']['createTime']/1000
-                )
-        # TODO: add agent info
-        #'agent': change['fullDocument']['xxx'],
-        
+        #if 'taker' in change['fullDocument']:
+        #    if 'name' in change['fullDocument']['taker']:
+        #        item['taker'] = change['fullDocument']['taker']['name']
+        #        item['take_time'] = datetime.fromtimestamp(
+        #            change['fullDocument']['createTime']/1000
+        #        )
+ 
         # insert into collection
         insert_res = usage_stats_col.insert_one(item)
         if isinstance(insert_res.inserted_id, bson.ObjectId):
@@ -104,27 +107,27 @@ def apply_changes(change, dbclient):
                 str(change['fullDocument'])
             )
 
-    # handle event of updating taker info of token
-    elif ns_col=='assessToken' and op_type=='update':
-        if 'taker' in change['updateDescription']['updatedFields']:
-            certificate_id = str(change['documentkey']['_id'])
-            taker_info = change['updateDescription']['updatedFields']['taker']
-            taker_name = taker_info['name']
-            take_time = datetime.fromtimestamp(
-                change['updateDescription']['updatedFields']['lUTime']/1000
-            )
-            # update db
-            upres = usage_stats_col.update_one(
-                    {'certificate_id': certificate_id},
-                    {'$set': {'taker': taker_name, 'take_time': take_time}},
-            )
-            if upres.modified_count==1:
-                apply_change_status = 'ok'
-            else:
-                apply_change_status = 'err'
-                err_info = 'Err while updating taker info - %s' % (
-                    str(change['updateDescription']['updatedFields'])
-                )
+    # XXX: handle event of updating taker info of token
+    #elif ns_col=='assessToken' and op_type=='update':
+    #    if 'taker' in change['updateDescription']['updatedFields']:
+    #        certificate_id = str(change['documentkey']['_id'])
+    #        taker_info = change['updateDescription']['updatedFields']['taker']
+    #        taker_name = taker_info['name']
+    #        take_time = datetime.fromtimestamp(
+    #            change['updateDescription']['updatedFields']['lUTime']/1000
+    #        )
+    #        # update db
+    #        upres = usage_stats_col.update_one(
+    #                {'certificate_id': certificate_id},
+    #                {'$set': {'taker': taker_name, 'take_time': take_time}},
+    #        )
+    #        if upres.modified_count==1:
+    #            apply_change_status = 'ok'
+    #        else:
+    #            apply_change_status = 'err'
+    #            err_info = 'Err while updating taker info - %s' % (
+    #                str(change['updateDescription']['updatedFields'])
+    #            )
 
     # handle event of creating new whitelist item
     elif ns_col=='whitelistItem' and op_type=='insert':
@@ -228,7 +231,7 @@ def apply_changes(change, dbclient):
                 err_info = 'Err while adding ticket info - %s' % (
                     str(raw_doc)
                 )
-                
+ 
     # handle event of modifying user info
     elif ns_col=='echainAticket' and op_type=='update':
         to_be_update = False
@@ -392,7 +395,6 @@ def apply_changes(change, dbclient):
                     )
 
     return apply_change_status, err_info
-
 
 
 if __name__ == '__main__':
