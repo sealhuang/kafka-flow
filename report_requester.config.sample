@@ -1,6 +1,6 @@
 [kafka]
-test_bootstrap_servers = test-kafka-server.com:9092
-production_bootstrap_servers = kafka-server.com:9092
+test_servers = test-kafka-server.com:9092
+production_servers = kafka-server.com:9092
 send_topic = SEND_TOPIC
 callback_topic = CALLBACK_TOPIC
 user = USER_NAME

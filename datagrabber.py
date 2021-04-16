@@ -70,24 +70,26 @@ def apply_changes(change, dbclient):
 
     # handle event of creating new token
     if ns_col=='assessToken' and op_type=='insert':
+        full_doc = change['fullDocument']
         item = {
             'certificate_type': 'token',
-            'token': change['fullDocument']['code'],
-            'certificate_id': str(change['fullDocument']['_id']),
+            'token': full_doc['code'],
+            'certificate_id': str(full_doc['_id']),
             'usage_count': 0,
-            'available_exam_type': change['fullDocument']['targetType'],
-            'project': change['fullDocument']['assessTokenTagBrief']['title'],
+            'available_exam_type': full_doc['targetType'],
         }
+        if 'assessTokenTagBrief' in full_doc:
+            item['project'] = full_doc['assessTokenTagBrief']['title']
         item['available_exam'] = '|'.join([
-            ele['title'] for ele in change['fullDocument']['targets']
+            ele['title'] for ele in full_doc['targets']
         ])
-        if 'name' in change['fullDocument']['creator']:
-            item['creator'] = change['fullDocument']['creator']['name']
+        if 'name' in full_doc['creator']:
+            item['creator'] = full_doc['creator']['name']
         else:
-            item['creator'] = str(change['fullDocument']['creator']['_id'])
+            item['creator'] = str(full_doc['creator']['_id'])
 
         item['create_time'] = datetime.fromtimestamp(
-            change['fullDocument']['createTime']/1000
+            full_doc['createTime']/1000
         )
         # TODO: add taker info
         #if 'taker' in change['fullDocument']:

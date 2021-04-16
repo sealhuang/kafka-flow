@@ -20,13 +20,9 @@ class ReportQuester():
         envs.read(env_cfg_file)
 
         if env_name=='test':
-            bootstrap_servers = [
-                envs.get('kafka', 'test_bootstrap_servers')
-            ]
+            bootstrap_servers = envs.get('kafka', 'test_servers').split(',')
         elif env_name=='production':
-            bootstrap_servers = [
-                envs.get('kafka', 'production_bootstrap_servers')
-            ]
+            bootstrap_servers = envs.get('kafka', 'production_servers').split(',')
         else:
             print('Invalid `env_name`, possible input: test or production.')
             return
