@@ -212,7 +212,7 @@ def apply_changes(change, dbclient):
             if 'city' in raw_doc:
                 upfields['city'] = raw_doc['city']
             if 'county' in raw_doc:
-                upfields['region'] = raw_doc['county']
+                upfields['district'] = raw_doc['county']
             if 'studyingStatus' in raw_doc:
                 if 'school' in raw_doc['studyingStatus']:
                     upfields['school'] = raw_doc['studyingStatus']['school']
@@ -254,7 +254,7 @@ def apply_changes(change, dbclient):
                 if 'city' in raw_doc:
                     upfields['city'] = raw_doc['city']
                 if 'county' in raw_doc:
-                    upfields['region'] = raw_doc['county']
+                    upfields['district'] = raw_doc['county']
                 if 'studyingStatus' in raw_doc:
                     if 'school' in raw_doc['studyingStatus']:
                         upfields['school'] = raw_doc['studyingStatus']['school']
@@ -332,7 +332,7 @@ def apply_changes(change, dbclient):
             if 'city' in raw_doc:
                 upfields['city'] = raw_doc['city']
             if 'county' in raw_doc:
-                upfields['region'] = raw_doc['county']
+                upfields['district'] = raw_doc['county']
             if 'studyingStatus' in raw_doc:
                 if 'school' in raw_doc['studyingStatus']:
                     upfields['school'] = raw_doc['studyingStatus']['school']
@@ -374,7 +374,7 @@ def apply_changes(change, dbclient):
                 if 'city' in raw_doc:
                     upfields['city'] = raw_doc['city']
                 if 'county' in raw_doc:
-                    upfields['region'] = raw_doc['county']
+                    upfields['district'] = raw_doc['county']
                 if 'studyingStatus' in raw_doc:
                     if 'school' in raw_doc['studyingStatus']:
                         upfields['school'] = raw_doc['studyingStatus']['school']
