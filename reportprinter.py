@@ -94,6 +94,7 @@ class KafkaReceiver(multiprocessing.Process):
             try:
                 _msg = json.loads(line)
                 assert 'ticketiID' in _msg
+                assert _msg['version']==2
                 if 'priority' in _msg and _msg['priority']=='low':
                     self.queue.put(line)
                 else:
@@ -160,24 +161,33 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
                     dummy_base_url):
     """Workflow for generating report."""
     # local vars init
-    data_dict = msg['data']
-    user_id = data_dict['ticketID']
-    report_type = msg['reportType']
-    data_purpose = msg['dataObjective']
-    rec_ts = msg['receivedTime']
+    ticket_id = msg['ticketID']
+    # TODO: change user_id into ticket_id
+    #user_id = data_dict['ticketID']
+    report_type = msg['report_type']
+    data_purpose = msg['data_objective']
+    
+    # check whether the callback is required
     callback_flag = True
-    if 'callback' in msg:
-        if msg['callback']=='N':
+    if 'callback_flag' in msg:
+        if not msg['callback_flag']:
             callback_flag = False
-        msg.pop('callback')
+        msg.pop('callback_flag')
 
-    # init return message
+    # XXX
+    #rec_ts = msg['receivedTime']
+
+    # init callback message
     uploaded_msg = {
-        'id': user_id,
+        'id': ticket_id,
         'report_type': report_type,
         'status': 'ok',
         'callback': callback_flag,
     }
+
+    # updated fields in answer sheet
+
+    # updated fields in report results
     result_data = {
         'dataType': 'results',
         'reportType': report_type,
@@ -645,12 +655,12 @@ def get_question_infos(ttl, db):
     try:
         qinfo = {}
         # get domain tags
-        qinfo['d_'+ttl] = []
+        qinfo['domain_'+ttl] = []
         for item in raw_info['tags']:
             if ('subPath' not in item) or \
                 ('-'.join(subpaths) in item['subPath']):
                 if str(item['_id']) in domain_tags:
-                    qinfo['d_'+ttl].append(domain_tags[str(item['_id'])])
+                    qinfo['domain_'+ttl].append(domain_tags[str(item['_id'])])
 
         # get other properties
         qinfo['attr_'+ttl] = {}
@@ -703,7 +713,7 @@ if __name__ == '__main__':
     ans_coll = pool_db[db_config.get('answer_sheet_collection')]
     res_coll = pool_db[db_config.get('result_collection')]
  
-    # get question infos
+    # XXX for test: get question infos
     #questions = [
     #    'leveledReading_articleComprehensionCore_overallPerception_175',
     #    'leveledReading_articleComprehensionCore_inference_173-1',
@@ -852,74 +862,68 @@ if __name__ == '__main__':
                 msg.pop('priority')
             #print(msg)
 
-            # XXX: get answer sheet from db
+            # get answer sheet from db
             ans_item = ans_coll.find_one({
                 'ticketID': bson.ObjectId(msg['ticketID'])
             })
             if not isinstance(ans_item, dict):
                 json_logger.error(
-                    '"rest":"Not fetch valid answer sheet (ticketID %s)"' %
+                    '"rest":"Not get answer sheet (ticketID %s)"' %
                         (msg['ticketID'])
                 )
                 continue
 
-            # TODO: change msg to ans_item
-
-            # validate received data
-            if not msg['data']:
-                json_logger.info('"rest":"No data found in %s"'%(str(msg)))
-                #print('Not find data in message.')
-                continue
-            try:
-                msg['data'] = eval(msg['data'])
-            except:
-                json_logger.error('"rest":"Get invalid data - %s"'%(str(msg)))
-                continue
-
             # get report type and the data objectives
-            if not msg['reportType']:
+            if not ans_item['report_type']:
                 json_logger.info(
-                    '"rest": "Get unrelated message - %s"'%(str(msg))
+                    '"rest": "Get unrelated message - %s"'%(str(ans_item))
                 )
                 continue
 
-            if '|' in msg['reportType']:
-                report_type, data_purpose = msg['reportType'].split('|')
-            elif 'dataObjective' in msg:
-                report_type = msg['reportType']
-                data_purpose = msg['dataObjective']
-            else:
-                report_type = msg['reportType']
-                data_purpose = 'REPORT'
-
-            # if we get a test message
-            if report_type=='test':
-                json_logger.info('"rest":"Get test message - %s"'%(str(msg)))
+            # XXX for test: if we get a test message
+            if ans_item['report_type']=='test':
+                json_logger.info(
+                    '"rest":"Get test message - %s"'%(str(ans_item))
+                )
                 continue
 
-            # normalize message structure
-            msg['reportType'] = report_type
-            msg['dataObjective'] = data_purpose
-            msg['reportProcessStatus'] = 'OK'
-            if 'receivedTime' not in msg:
-                ts = datetime.datetime.strftime(
-                    datetime.datetime.now(),
-                    '%Y%m%d%H%M%S',
+            # if the objective of the message is `STORE`
+            if ans_item['data_objective']=='STORE':
+                continue
+
+            # validate answer sheet
+            if ('data' not in ans_item) or \
+                (not isinstance(ans_item['data'], dict)):
+                json_logger.error(
+                    '"rest":"No valid data in answer sheet (%s)"' % 
+                        (msg['ticketID'])
                 )
-                msg['receivedTime'] = ts
+                continue
+
+            # get question infos for each question
+            question_list = [
+                q[4:] for q in ans_item['data'] if q.startswith('rsp_')
+            ]
+
+            for qtitle in question_list:
+                qinfo = get_question_infos(
+                    qtitle,
+                    dbclient[db_config.get('question_db')],
+                )
+                if isinstance(qinfo, dict):
+                    ans_item['data'].update(qinfo)
+
+            # if no callback required
+            if ('callback' in msg) and (msg['callback']=='N'):
+                ans_item['callback_flag'] = False
             # key `dataType` is used for choosing which collection the
             # message should be saved
-            msg['dataType'] = 'raw_msgs'
-
-            # if the objective of the message is `store`
-            if data_purpose=='STORE':
-                cache_queue.put(msg)
-                continue
+            #msg['dataType'] = 'raw_msgs'
 
             pool.apply_async(
                 generate_report,
                 (
-                    msg,
+                    ans_item,
                     out_queue,
                     cache_queue,
                     bucket,
