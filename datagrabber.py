@@ -55,6 +55,7 @@ def apply_changes(change, dbclient):
     # config collections in datapool DB
     datapool = dbclient[dbconfig.get('pool_db')]
     usage_stats_col = datapool['examUsageStats']
+    report_result_col = datapool['reportResult']
     # auxiliarytoken collection is used for search assess-token ID based on
     # assess code and the used exam/exam-chain ID.
     auxiliarytoken_col = dbclient[dbconfig.get('exams_db')]['auxiliarytoken']
@@ -279,9 +280,12 @@ def apply_changes(change, dbclient):
     # handle event of exchanging exam assess ticket
     elif ns_col=='examAticket' and op_type=='insert':
         raw_doc = change['fullDocument']
-        
-        # token mode
+ 
         token_recorded = False
+        assess_token = None
+        project = None
+ 
+        # token-exam mode
         if 'assessToken' in raw_doc:
             # find token id
             assess_token = raw_doc['assessToken']
@@ -300,9 +304,10 @@ def apply_changes(change, dbclient):
                 })
                 if isinstance(token_info, dict):
                     token_recorded = True
+                    project = token_info['project']
                     #certificate_type = 'token'
 
-        # TODO: add whitelist mode
+        # whitelist-exam mode
         elif 'whiteListItemId' in raw_doc:
             # assert the existence of the whitelist in usageStats collection
             certificate_id = raw_doc['whiteListItemId']
@@ -312,7 +317,22 @@ def apply_changes(change, dbclient):
             if isinstance(token_info, dict):
                 token_recorded = True
 
+        # exam-chain mode
+        elif 'echainAticket' in raw_doc:
+            target_type = 'ExamChain'
+            echain_ticket_id = raw_doc['echainAticket']
+            token_info = usage_stats_col.find_one({
+                'ticket_id': echain_ticket_id,
+            })
+            if isinstance(token_info, dict):
+                if token_info['certificate_type']=='token':
+                    assess_token = token_info['token']
+                    project = token_info['project']
+                else:
+                    project = token_info['used_exam']
+
         if token_recorded:
+            # update examUsageStats collection
             upfields = {
                 'ticket_id': str(raw_doc['_id']),
                 'user_id': raw_doc['owner'],
@@ -353,6 +373,28 @@ def apply_changes(change, dbclient):
                 err_info = 'Err while adding ticket info - %s' % (
                     str(raw_doc)
                 )
+
+        # insert document into reportResults collection
+        insfields = {
+            'ticketID': str(raw_doc['_id']),
+            'examTitle': raw_doc['exam']['title'],
+            'reportRequest': False,
+            'reportStatus': 'WAIT',
+        }
+        if 'name' in raw_doc:
+            insfields['name'] = raw_doc['name']
+        if assess_token:
+            insfields['token'] = assess_token
+        if project:
+            insfields['project'] = project
+        insert_res = report_result_col.insert_one(insfields)
+        if isinstance(insert_res.inserted_id, bson.ObjectId):
+            apply_change_status = 'ok'
+        else:
+            apply_change_status = 'err'
+            err_info += 'Err while inserting new result: %s' % (
+                str(insfields)
+            )
 
     # handle event of modifying user info
     elif ns_col=='examAticket' and op_type=='update':
