@@ -89,6 +89,7 @@ class KafkaReceiver(multiprocessing.Process):
             #print(line)
             try:
                 _msg = json.loads(line)
+                assert 'version' not in _msg
                 if 'priority' in _msg and _msg['priority']=='low':
                     self.queue.put(line)
                 else:
