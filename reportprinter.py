@@ -90,10 +90,10 @@ class KafkaReceiver(multiprocessing.Process):
         # read message
         for msg in self.consumer:
             line = msg.value.decode('utf-8').strip()
-            #print(line)
+            print(line)
             try:
                 _msg = json.loads(line)
-                assert 'ticketiID' in _msg
+                assert 'ticketID' in _msg
                 assert _msg['version']==2
                 if 'priority' in _msg and _msg['priority']=='low':
                     self.queue.put(line)
@@ -162,8 +162,6 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
     """Workflow for generating report."""
     # local vars init
     ticket_id = msg['ticketID']
-    # TODO: change user_id into ticket_id
-    #user_id = data_dict['ticketID']
     report_type = msg['reportType']
     data_purpose = msg['dataObjective']
     
@@ -183,6 +181,8 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
         'status': 'ok',
         'callback': callback_flag,
     }
+
+    print(msg)
 
     # updated fields in report result
     result_data = {}
@@ -486,6 +486,8 @@ def save_msgs(msg_list, ans_col, results_col):
         for item in msg_list:
             _tmp = dict(item)
             _tmp.pop('ticketID')
+            if 'reportData' not in _tmp:
+                _tmp['reportData'] = {}
             upsert_cmd.append(UpdateOne(
                 {'ticketID': item['ticketID']},
                 {'$set': _tmp},
@@ -597,8 +599,9 @@ def get_question_infos(ttl, db):
         _qunit = raw_info['compositeQunit']
         for sp in subpaths:
             _qunit = _qunit['subQunits'][int(sp)-1]
-        for k in _qunit['extFeatures']:
-            qinfo['attr_'+ttl][k] = _qunit['extFeatures'][k]['value']
+        if 'extFeatures' in _qunit:
+            for k in _qunit['extFeatures']:
+                qinfo['attr_'+ttl][k] = _qunit['extFeatures'][k]['value']
 
         return qinfo 
 
@@ -619,7 +622,7 @@ def queue_writer(q):
             }
         else:
             msg = {
-                'ticketID': '00',+str(i)
+                'ticketID': '00'+str(i)
             }
         q.put(json.dumps(msg))
 
@@ -643,16 +646,8 @@ if __name__ == '__main__':
  
     # XXX for test: get question infos
     #questions = [
-    #    'leveledReading_articleComprehensionCore_overallPerception_175',
-    #    'leveledReading_articleComprehensionCore_inference_173-1',
-    #    'informationLiteracy_acquire_10-1-1',
-    #    'informationLiteracy_acquire_10-1-2',
-    #    'informationLiteracy_acquire_10-1-5',
-    #    'leveledReading_articleComprehensionCore_inference_173-1',
-    #    'leveledReading_articleComprehensionCore_overallPerception_175',
-    #    'informationLiteracy_acquire_10-1-5',
-    #    'leveledReading_articleComprehensionCore_infoExtraction_103-1',
-    #    'leveledReading_articleComprehensionCore_infoExtraction_103-2',
+    #    'visualSpatial_mentalRotation_3dRotation_T1_24',
+    #    'visualSpatial_mentalRotation_3dRotation_T1_23'
     #]
     #for qtitle in questions:
     #    print('*'*10)
@@ -700,6 +695,11 @@ if __name__ == '__main__':
 
     # logging
     json_logger = get_json_logger()
+
+    in_queue.put(json.dumps({
+        'ticketID': '60814eace781a7665c8c88e6',
+        'version': 2,
+    }))
 
     # generate report
     cache_max_time = envs.getint('general', 'cache_max_time')
@@ -792,7 +792,7 @@ if __name__ == '__main__':
 
             # get answer sheet from db
             ans_item = ans_coll.find_one({
-                'ticketID': bson.ObjectId(msg['ticketID'])
+                'ticketID': msg['ticketID']
             })
             if not isinstance(ans_item, dict):
                 json_logger.error(
@@ -836,7 +836,6 @@ if __name__ == '__main__':
             question_list = [
                 q[4:] for q in ans_item['data'] if q.startswith('rsp_')
             ]
-
             for qtitle in question_list:
                 qinfo = get_question_infos(
                     qtitle,

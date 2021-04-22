@@ -378,6 +378,7 @@ def apply_changes(change, dbclient):
         insfields = {
             'ticketID': str(raw_doc['_id']),
             'examTitle': raw_doc['exam']['title'],
+            'userDBID': raw_doc['owner'],
             'reportRequest': False,
             'reportStatus': 'WAIT',
         }
