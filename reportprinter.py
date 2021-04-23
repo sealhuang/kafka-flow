@@ -116,7 +116,7 @@ def get_json_logger(log_level=logging.DEBUG):
 
     # set json format log file
     handler = TimedRotatingCompressedFileHandler(
-        os.path.join(log_dir, 'log.json'),
+        os.path.join(log_dir, 'reportprinter.log'),
         when='W6',
         interval=1,
         backup_count=50,
@@ -188,7 +188,6 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
     result_data = {}
     sel_keys = [
         'ticketID',
-        'userID',
         'name',
         'gender',
         'age',
@@ -198,14 +197,15 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
         'district',
         'school',
         'grade',
-        'paperID',
         'paperVersion',
         'dataObjective',
         'reportType',
     ]
     for k in sel_keys:
         result_data[k] = msg[k]
+    result_data['userID'] = msg['userId']
     result_data['class'] = msg['executiveClass']
+    result_data['paperID'] = msg['paperId']
     result_data['examStartTime'] = datetime.datetime.fromtimestamp(
         msg['examStartTime']/1000
     )
@@ -678,7 +678,7 @@ if __name__ == '__main__':
     kafka_receiver = KafkaReceiver(envs['kafka'], fast_in_queue, in_queue)
     kafka_receiver.start()
 
-    #XXX for test: Create a message writer
+    # XXX for test: Create a message writer
     #multiprocessing.Process(target=queue_writer, args=(in_queue,)).start()
 
     # connect to aliyun oss
@@ -696,10 +696,11 @@ if __name__ == '__main__':
     # logging
     json_logger = get_json_logger()
 
-    in_queue.put(json.dumps({
-        'ticketID': '60814eace781a7665c8c88e6',
-        'version': 2,
-    }))
+    # XXX for test: Send report request
+    #in_queue.put(json.dumps({
+    #    'ticketID': '60814eace781a7665c8c88e6',
+    #    'version': 2,
+    #}))
 
     # generate report
     cache_max_time = envs.getint('general', 'cache_max_time')
