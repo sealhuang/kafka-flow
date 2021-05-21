@@ -21,7 +21,7 @@ import oss2
 from kafka import KafkaConsumer, KafkaProducer
 from kafka.errors import KafkaError, KafkaTimeoutError
 from weasyprint import HTML
-from cachetools import cached, TTLCache
+from cachetools import cached, TTLCache, LRUCache
 from cachetools.keys import hashkey
 
 from utils import conn2db
@@ -560,13 +560,15 @@ def _get_full_tags(idx, all_tags, full_tags):
         return full_tags
 
 @cached(cache=TTLCache(maxsize=512, ttl=900), key=lambda ttl, db: hashkey(ttl))
+#@cached(cache=LRUCache(maxsize=512), key=lambda ttl, db: hashkey(ttl))
 def get_question_infos(ttl, db):
     """Get question info from db indexed by question title."""
     # get questions' domain tags first
     tag_col = db['questionTag']
     all_tags = {}
     for item in tag_col.find({'parent': {'$exists': True}}):
-        all_tags[str(item['_id'])] = (item['title'], item['parent'])
+        if not item['parent'] is None:
+            all_tags[str(item['_id'])] = (item['title'], item['parent'])
     # get all domain tags
     domain_tags = {}
     for idx in all_tags:
@@ -587,7 +589,7 @@ def get_question_infos(ttl, db):
         # get domain tags
         qinfo['domain_'+ttl] = []
         for item in raw_info['tags']:
-            if ('subPath' not in item) or \
+            if (item.get('subPath', None) is None) or \
                 ('-'.join(subpaths) in item['subPath']):
                 if str(item['_id']) in domain_tags:
                     qinfo['domain_'+ttl].append(domain_tags[str(item['_id'])])
