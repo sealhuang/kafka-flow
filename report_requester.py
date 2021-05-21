@@ -54,6 +54,8 @@ class ReportQuester():
             }
             if priority and priority in ['high', 'low']:
                 item['priority'] = priority
+            if callback=='N':
+                item['callback'] = 'N'
             msg_list.append(item)
 
         # send request
