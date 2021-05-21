@@ -19,12 +19,14 @@ class ReportQuester():
         envs = ConfigParser()
         envs.read(env_cfg_file)
 
-        if env_name=='test':
-            bootstrap_servers = envs.get('kafka', 'test_servers').split(',')
+        if env_name=='sundial':
+            bootstrap_servers = envs.get('kafka', 'sundial_servers').split(',')
+        elif env_name=='beta':
+            bootstrap_servers = envs.get('kafka', 'beta_servers').split(',')
         elif env_name=='production':
             bootstrap_servers = envs.get('kafka', 'production_servers').split(',')
         else:
-            print('Invalid `env_name`, possible input: test or production.')
+            print('Invalid `env_name`, possible input: sundial, beta or production.')
             return
 
         self.send_topic = envs.get('kafka', 'send_topic')
@@ -40,34 +42,19 @@ class ReportQuester():
             retries = 5,
         )
 
-    def send(self, msgs, report_type=None, data_objective=None,
-             priority=None, callback='Y'):
+    def send(self, ticket_ids, priority=None, callback='Y'):
         """Send report messages."""
-        # get message list
-        msg_list = []
-        if isinstance(msgs, dict):
-            msg_list.append(dict(msgs))
-        elif isinstance(msgs, list):
-            msg_list.extend(msgs)
-        msg_list = [dict(item) for item in msg_list]
-
         # normalize messages
-        for item in msg_list:
-            item['db_id'] = str(item['_id'])
-            item['data'] = str(item['data'])
-            item['receivedTime'] = str(item['receivedTime'])
-            if data_objective:
-                item['dataObjective'] = data_objective
-            else:
-                item['dataObjective'] = 'REPORT'
-            if report_type:
-                item['reportType'] = report_type
+        msg_list = []
+        for ticket_id in ticket_ids:
+            item = {
+                'ticketID': ticket_id,
+                'version': 2,
+                'priority': 'low',
+            }
             if priority and priority in ['high', 'low']:
                 item['priority'] = priority
-            if callback in ['Y', 'N']:
-                item['callback'] = callback
-            item.pop('_id')
-            item.pop('receivedTimeFormatted')
+            msg_list.append(item)
 
         # send request
         c = 0
