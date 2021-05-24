@@ -146,6 +146,8 @@ def apply_changes(change, dbclient):
             ),
             'user_id': str(change['fullDocument']['member']['_id']),
         }
+        if 'whitelistTagBrief' in change['fullDocument']:
+            item['project'] = change['fullDocument']['whitelistTagBrief']['title']
 
         # insert into collection
         insert_res = usage_stats_col.insert_one(item)
