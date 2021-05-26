@@ -110,27 +110,47 @@ def apply_changes(change, dbclient):
                 str(change['fullDocument'])
             )
 
-    # XXX: handle event of updating taker info of token
-    #elif ns_col=='assessToken' and op_type=='update':
-    #    if 'taker' in change['updateDescription']['updatedFields']:
-    #        certificate_id = str(change['documentkey']['_id'])
-    #        taker_info = change['updateDescription']['updatedFields']['taker']
-    #        taker_name = taker_info['name']
-    #        take_time = datetime.fromtimestamp(
-    #            change['updateDescription']['updatedFields']['lUTime']/1000
-    #        )
-    #        # update db
-    #        upres = usage_stats_col.update_one(
-    #                {'certificate_id': certificate_id},
-    #                {'$set': {'taker': taker_name, 'take_time': take_time}},
-    #        )
-    #        if upres.modified_count==1:
-    #            apply_change_status = 'ok'
-    #        else:
-    #            apply_change_status = 'err'
-    #            err_info = 'Err while updating taker info - %s' % (
-    #                str(change['updateDescription']['updatedFields'])
-    #            )
+    # handle event of updating token info
+    elif ns_col=='assessToken' and op_type=='update':
+        # update project tag
+        update_fields = change['updateDescription']['updatedFields']
+        if 'assessTokenTagBrief' in update_fields:
+            certificate_id = str(change['documentKey']['_id'])
+            tag_title = update_fields['assessTokenTagBrief']['title']
+            # update db
+            upres = usage_stats_col.update_one(
+                {'certificate_id': certificate_id},
+                {'$set': {'project': tag_title}},
+            )
+            if upres.modified_count==1:
+                apply_change_status = 'ok'
+            else:
+                apply_change_status = 'err'
+                err_info = 'Err while updating project info for %s - %s' % (
+                    certificate_id,
+                    str(change['updateDescription']['updatedFields'])
+                )
+
+        # update taker info
+        #if 'taker' in change['updateDescription']['updatedFields']:
+        #    certificate_id = str(change['documentKey']['_id'])
+        #    taker_info = change['updateDescription']['updatedFields']['taker']
+        #    taker_name = taker_info['name']
+        #    take_time = datetime.fromtimestamp(
+        #        change['updateDescription']['updatedFields']['lUTime']/1000
+        #    )
+        #    # update db
+        #    upres = usage_stats_col.update_one(
+        #            {'certificate_id': certificate_id},
+        #            {'$set': {'taker': taker_name, 'take_time': take_time}},
+        #    )
+        #    if upres.modified_count==1:
+        #        apply_change_status = 'ok'
+        #    else:
+        #        apply_change_status = 'err'
+        #        err_info = 'Err while updating taker info - %s' % (
+        #            str(change['updateDescription']['updatedFields'])
+        #        )
 
     # handle event of creating new whitelist item
     elif ns_col=='whitelistItem' and op_type=='insert':
@@ -158,6 +178,27 @@ def apply_changes(change, dbclient):
             err_info = 'Err while inserting new whitelist item: %s' % (
                 str(change['fullDocument'])
             )
+
+    # handle event of updating whitelist item info
+    elif ns_col=='whitelistItem' and op_type=='update':
+        # update project tag
+        update_fields = change['updateDescription']['updatedFields']
+        if 'whitelistTagBrief' in update_fields:
+            certificate_id = str(change['documentKey']['_id'])
+            tag_title = update_fields['whitelistTagBrief']['title']
+            # update db
+            upres = usage_stats_col.update_one(
+                {'certificate_id': certificate_id},
+                {'$set': {'project': tag_title}},
+            )
+            if upres.modified_count==1:
+                apply_change_status = 'ok'
+            else:
+                apply_change_status = 'err'
+                err_info = 'Err while updating project info for %s - %s' % (
+                    certificate_id,
+                    str(change['updateDescription']['updatedFields'])
+                )
 
     # handle event of exchanging eChain assess ticket
     elif ns_col=='echainAticket' and op_type=='insert':
