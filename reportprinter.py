@@ -182,7 +182,7 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
         'callback': callback_flag,
     }
 
-    print(msg)
+    #print('Generating report for ticket ID %s'%(ticket_id))
 
     # updated fields in report result
     result_data = {}
@@ -202,7 +202,7 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
         'reportType',
     ]
     for k in sel_keys:
-        result_data[k] = msg[k]
+        result_data[k] = msg.get(k, '')
     result_data['userID'] = msg['userId']
     result_data['class'] = msg['executiveClass']
     result_data['paperID'] = msg['paperId']
@@ -213,6 +213,7 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
         msg['examEndTime']/1000
     )
     result_data['reportRequest'] = True
+
 
     # get report types
     report_gallery = get_report_gallery(
@@ -250,6 +251,7 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
     json_file = os.path.join(base_dir, '%s_data.json'%(ticket_id))
     with open(json_file, 'w') as jf:
         jf.write(json.dumps(msg)+'\n')
+
         
     # run ipynb file
     ipynb_name = report_cfg['entry']
@@ -355,7 +357,7 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
             datetime.datetime.now(),
             '%Y%m%d%H%M%S',
         )
-        pdf_filename = 'report_%s_%s.pdf'%(user_id, ts)
+        pdf_filename = 'report_%s_%s.pdf'%(ticket_id, ts)
         pdf_file = os.path.join(pdf_dir, pdf_filename)
         try:
             HTML(std_html_file).write_pdf(pdf_file)
@@ -398,6 +400,7 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
             #out_queue.put(json.dumps(uploaded_msg))
             out_queue.put(uploaded_msg)
             # add message to cache
+            result_data['reportStatus'] = 'OK'
             result_data['reportURL'] = dummy_remote_url
             cache_queue.put(result_data)
         else:
@@ -431,10 +434,10 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
             return None
 
     # move raw data and result file
-    targ_file = os.path.join(data_dir, '%s_%s.json'%(user_id, rec_ts))
+    targ_file = os.path.join(data_dir, '%s_%s.json'%(ticket_id, rec_ts))
     shutil.move(json_file, targ_file)
     if result_file:
-        targ_file = os.path.join(data_dir, '%s_results_%s.json'%(user_id, rec_ts))
+        targ_file = os.path.join(data_dir, '%s_results_%s.json'%(ticket_id, rec_ts))
         shutil.move(result_file, targ_file)
 
 def upload_file(bucket, base_url, src_file, remote_file):
@@ -464,6 +467,8 @@ def upload_file(bucket, base_url, src_file, remote_file):
 def save_msgs(msg_list, ans_col, results_col):
     """Save message."""
     insert2db_err = False
+
+    #print(msg_list)
 
     try:
         # update answer sheet
@@ -529,10 +534,7 @@ def save_msgs(msg_list, ans_col, results_col):
         except:
             return 'msg2file_err'
         else:
-            if insert2db_err:
-                return 'msg2db_err'
-            else:
-                return 'msg2file_ok'
+            return 'msg2file_ok'
 
 def normalize_ret_dict(d):
     """Normalize return message."""
@@ -720,11 +722,11 @@ if __name__ == '__main__':
             if save_ret=='msg2db_ok':
                 json_logger.info('"rest":"Save msgs to db successfully"')
             elif save_ret=='msg2file_ok':
-                json_logger.info('"rest":"Save msgs to file successfully"')
+                json_logger.info('"rest":"Error while saving msgs to db, save results to file successfully"')
             elif save_ret=='msg2db_err':
-                json_logger.error('"rest":"Error while save msgs to db"')
+                json_logger.error('"rest":"Error while saving msgs to db"')
             elif save_ret=='msg2file_err':
-                json_logger.error('"rest":"Error while save msgs to file"')
+                json_logger.error('"rest":"Error while saving msgs to file"')
 
             last_time = time.time()
             on_duty = True
