@@ -94,11 +94,12 @@ class KafkaReceiver(multiprocessing.Process):
             try:
                 _msg = json.loads(line)
                 assert 'ticketID' in _msg
-                assert _msg['version']==2
-                if 'priority' in _msg and _msg['priority']=='low':
-                    self.queue.put(line)
+                assert _msg.get('version', None)==2
+                priority = _msg.pop('priority', 'high')
+                if priority=='low':
+                    self.queue.put(_msg)
                 else:
-                    self.fast_queue.put(line)
+                    self.fast_queue.put(_msg)
             except:
                 print('Receive invalid message')
                 print(line)
@@ -165,12 +166,13 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
     report_type = msg['reportType']
     data_purpose = msg['dataObjective']
     
+    #print('Generating report for ticket ID %s'%(ticket_id))
+
     # check whether the callback is required
     callback_flag = True
-    if 'callback_flag' in msg:
-        if not msg['callback_flag']:
-            callback_flag = False
-        msg.pop('callback_flag')
+    if not msg['callback_flag']:
+        callback_flag = False
+    msg.pop('callback_flag')
 
     rec_ts = msg['examEndTime']
 
@@ -182,8 +184,7 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
         'callback': callback_flag,
     }
 
-    #print('Generating report for ticket ID %s'%(ticket_id))
-
+    # init result message
     # updated fields in report result
     result_data = {}
     sel_keys = [
@@ -213,6 +214,7 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
         msg['examEndTime']/1000
     )
     result_data['reportRequest'] = True
+    result_data['reportStatus'] = 'OK'
 
 
     # get report types
@@ -221,12 +223,12 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
     )
 
     if report_type not in report_gallery:
+        # add callback message to out queue
         uploaded_msg['status'] = 'error'
         uploaded_msg['args'] = ''
         uploaded_msg['stderr'] = 'Not find report type %s'%(report_type)
-        #out_queue.put(json.dumps(uploaded_msg))
         out_queue.put(uploaded_msg)
-        # add message to cache
+        # add result message to cache
         result_data['reportStatus'] = 'ERR'
         cache_queue.put(result_data)
         print('Error! Not find report type named %s'%(report_type))
@@ -281,7 +283,6 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
         uploaded_msg['status'] = 'error'
         uploaded_msg['args'] = ret.args
         uploaded_msg['stderr'] = ret.stderr
-        #out_queue.put(json.dumps(uploaded_msg))
         out_queue.put(uploaded_msg)
         # add message to cache
         result_data['reportStatus'] = 'ERR'
@@ -338,7 +339,6 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
             uploaded_msg['status'] = 'error'
             uploaded_msg['args'] = ret.args
             uploaded_msg['stderr'] = ret.stderr
-            #out_queue.put(json.dumps(uploaded_msg))
             out_queue.put(uploaded_msg)
             # add message to cache
             result_data['reportStatus'] = 'ERR'
@@ -368,7 +368,6 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
             uploaded_msg['args'] = ''
             uploaded_msg['stderr'] = 'Err in weasyprint process'
             out_queue.put(uploaded_msg)
-            #out_queue.put(json.dumps(uploaded_msg))
             # add message to cache
             result_data['reportStatus'] = 'ERR'
             cache_queue.put(result_data)
@@ -397,17 +396,14 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
             uploaded_msg['status'] = 'ok'
             dummy_remote_url = 'https://'+dummy_base_url+'/'+remote_file
             uploaded_msg['urls'] = {report_type: dummy_remote_url}
-            #out_queue.put(json.dumps(uploaded_msg))
             out_queue.put(uploaded_msg)
             # add message to cache
-            result_data['reportStatus'] = 'OK'
             result_data['reportURL'] = dummy_remote_url
             cache_queue.put(result_data)
         else:
             uploaded_msg['status'] = 'error'
             uploaded_msg['args'] = 'Uploads to oss.'
             uploaded_msg['stderr'] = 'Falied to upload pdf file.'
-            #out_queue.put(json.dumps(uploaded_msg))
             out_queue.put(uploaded_msg)
             result_data['reportStatus'] = 'ERR2OSS'
             cache_queue.put(result_data)
@@ -422,7 +418,6 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
         if result_file:
             uploaded_msg['status'] = 'ok'
             out_queue.put(uploaded_msg)
-            result_data['reportStatus'] = 'OK'
             cache_queue.put(result_data)
         else:
             uploaded_msg['status'] = 'error'
@@ -439,6 +434,8 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
     if result_file:
         targ_file = os.path.join(data_dir, '%s_results_%s.json'%(ticket_id, rec_ts))
         shutil.move(result_file, targ_file)
+    elif os.path.exists(os.path.join(base_dir, '%s_results.json'%(ticket_id))):
+        os.remove(os.path.join(base_dir, '%s_results.json'%(ticket_id)))
 
 def upload_file(bucket, base_url, src_file, remote_file):
     """Upload files to aliyun oss.
@@ -623,10 +620,12 @@ def queue_writer(q):
             msg = {
                 'ticketID': '000'+str(i),
                 'priority': 'low',
+                'version': 2,
             }
         else:
             msg = {
-                'ticketID': '00'+str(i)
+                'ticketID': '00'+str(i),
+                'version': 2,
             }
         q.put(json.dumps(msg))
 
@@ -787,12 +786,9 @@ if __name__ == '__main__':
         if (pool._taskqueue.qsize() <= (3*max_worker_num)) and \
            (not in_queue.empty() or not fast_in_queue.empty()):
             if not fast_in_queue.empty():
-                raw_msg = fast_in_queue.get()
+                msg = fast_in_queue.get()
             else:
-                raw_msg = in_queue.get()
-            msg = json.loads(raw_msg)
-            if 'priority' in msg:
-                msg.pop('priority')
+                msg = in_queue.get()
             #print(msg)
 
             # get answer sheet from db
@@ -810,8 +806,14 @@ if __name__ == '__main__':
             ans_item.pop('_id', None)
             ans_item.pop('_class', None)
 
+            # modify report type and data objective if provided
+            if msg.get('reportType', None):
+                ans_item['reportType'] = msg['reportType']
+            if msg.get('dataObjective', None):
+                ans_item['dataObjective'] = msg['dataObjective']
+
             # get report type and the data objectives
-            if not ans_item['reportType']:
+            if not ans_item.get('reportType', ''):
                 json_logger.info(
                     '"rest": "Get unrelated message - %s"'%(str(ans_item))
                 )
@@ -832,7 +834,7 @@ if __name__ == '__main__':
             if ('data' not in ans_item) or \
                 (not isinstance(ans_item['data'], dict)):
                 json_logger.error(
-                    '"rest":"No valid data in answer sheet (%s)"' % 
+                    '"rest":"No data found in answer sheet (%s)"' % 
                         (msg['ticketID'])
                 )
                 continue
@@ -850,7 +852,8 @@ if __name__ == '__main__':
                     ans_item['data'].update(qinfo)
 
             # if no callback required
-            if ('callback' in msg) and (msg['callback']=='N'):
+            ans_item['callback_flag'] = True
+            if msg.get('callback', 'Y')=='N':
                 ans_item['callback_flag'] = False
 
             pool.apply_async(

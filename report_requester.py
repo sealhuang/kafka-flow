@@ -42,7 +42,8 @@ class ReportQuester():
             retries = 5,
         )
 
-    def send(self, ticket_ids, priority=None, callback='Y'):
+    def send(self, ticket_ids, priority=None, callback='Y',
+             report_type=None, data_objective=None):
         """Send report messages."""
         # normalize messages
         msg_list = []
@@ -52,10 +53,14 @@ class ReportQuester():
                 'version': 2,
                 'priority': 'low',
             }
-            if priority and priority in ['high', 'low']:
+            if priority in ['high', 'low']:
                 item['priority'] = priority
             if callback=='N':
                 item['callback'] = 'N'
+            if report_type:
+                item['reportType'] = report_type
+            if data_objective in ['REPORT', 'CALC']:
+                item['dataObjective'] = data_objective
             msg_list.append(item)
 
         # send request
