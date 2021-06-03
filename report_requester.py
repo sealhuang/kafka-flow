@@ -128,35 +128,28 @@ class ReportQuester():
 
 def export_reports(msgs, name_fields, export_dir,
                    env_cfg_file='./report_requester.config'):
-    # check input
+    # check input `name_fields`
     if not isinstance(name_fields, list):
         print('Error: `name_fields`should be a list!')
         return
 
+    # check data type of `msgs`
+    if isinstance(msgs, dict):
+        msgs = [msgs]
+    assert isinstance(msgs, list)
+
     # get message list
     msg_list = []
 
-    if isinstance(msgs, dict):
-        if ('dataObjective' in msgs) and \
-           (msgs['dataObjective']=='REPORT') and \
-           ('report_url' in msgs):
-            msg_list.append(dict(msgs))
+    for item in msgs:
+        if (isinstance(item, dict)) and \
+            (item.get('dataObjective')=='REPORT') and \
+            (item.get('reportStatus')=='OK'):
+            msg_list.append(dict(item))
         else:
             print('Invalid message for exporting report.')
-            print(msgs)
+            print(item)
             return
-
-    elif isinstance(msgs, list):
-        for item in msgs:
-            if (isinstance(item, dict)) and \
-               ('dataObjective' in item) and \
-               (item['dataObjective']=='REPORT') and \
-               ('report_url' in item):
-                msg_list.append(dict(item))
-            else:
-                print('Invalid message for exporting report.')
-                print(item)
-                return
 
     # check name fields
     for item in msg_list:
@@ -187,7 +180,7 @@ def export_reports(msgs, name_fields, export_dir,
 
     # rename pdfs
     for item in msg_list:
-        old_url = item['report_url']
+        old_url = item['reportURL']
         old_url = old_url[old_url.index(dummy_base_url):]
         old_addr = '/'.join(old_url.split('/')[1:])
 
