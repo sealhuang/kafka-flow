@@ -215,6 +215,7 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
     )
     result_data['reportRequest'] = True
     result_data['reportStatus'] = 'OK'
+    result_data['reportURL'] = ''
 
 
     # get report types
