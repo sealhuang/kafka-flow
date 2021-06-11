@@ -601,7 +601,7 @@ def get_question_infos(ttl, db):
         _qunit = raw_info['compositeQunit']
         for sp in subpaths:
             _qunit = _qunit['subQunits'][int(sp)-1]
-        if 'extFeatures' in _qunit:
+        if ('extFeatures' in _qunit) and isinstance(_qunit['extFeatures'], dict):
             for k in _qunit['extFeatures']:
                 qinfo['attr_'+ttl][k] = _qunit['extFeatures'][k]['value']
 
