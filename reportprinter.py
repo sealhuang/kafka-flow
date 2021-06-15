@@ -803,6 +803,8 @@ if __name__ == '__main__':
                 )
                 continue
 
+            GET_QINFO = True
+
             # delete useless fields
             ans_item.pop('_id', None)
             ans_item.pop('_class', None)
@@ -851,6 +853,16 @@ if __name__ == '__main__':
                 )
                 if isinstance(qinfo, dict):
                     ans_item['data'].update(qinfo)
+                else:
+                    GET_QINFO = False
+                    break
+            # if not get question info correctly
+            if not GET_QINFO:
+                json_logger.error(
+                    '"rest":"Not found qinfo for %s in answer sheet (%s)"' % 
+                        (qtitle, msg['ticketID'])
+                )
+                continue
 
             # if no callback required
             ans_item['callback_flag'] = True
