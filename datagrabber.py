@@ -424,6 +424,7 @@ def apply_changes(change, dbclient):
             'userDBID': raw_doc['owner'],
             'reportRequest': False,
             'reportStatus': 'WAIT',
+            'loginTime': datetime.fromtimestamp(raw_doc['lUTime']/1000),
         }
         if 'name' in raw_doc:
             insfields['name'] = raw_doc['name']
