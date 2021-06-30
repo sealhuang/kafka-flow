@@ -64,7 +64,7 @@ class TimedRotatingCompressedFileHandler(TimedRotatingFileHandler):
 class KafkaReceiver(multiprocessing.Process):
     """Message Receiver for the Sundial-Report-Stream."""
 
-    def __init__(self, envs, fast_queue, queue):
+    def __init__(self, envs, fast_queue, queue, max_len):
         """Initialize kafka message receiver process."""
         multiprocessing.Process.__init__(self)
 
@@ -84,25 +84,58 @@ class KafkaReceiver(multiprocessing.Process):
 
         self.queue = queue
         self.fast_queue = fast_queue
+        self.queue_max_size = max_len
 
     def run(self):
         """Receive message and put it in the queue."""
-        # read message
-        for msg in self.consumer:
-            line = msg.value.decode('utf-8').strip()
-            print(line)
-            try:
-                _msg = json.loads(line)
-                assert 'ticketID' in _msg
-                assert _msg.get('version', None)==2
-                priority = _msg.pop('priority', 'high')
-                if priority=='low':
-                    self.queue.put(_msg)
+        msg_list = []
+        while True:
+            is_working = False
+
+            # retrive messages if there is less in cache
+            if len(msg_list) < self.queue_max_size:
+                try:
+                    msg_pack = self.consumer.poll(
+                        timeout_ms=500,
+                        max_records = 2*self.queue_max_size - len(msg_list),
+                    )
+                    self.consumer.commit()
+                except:
+                    print('Err while retrive kafka messages!')
                 else:
-                    self.fast_queue.put(_msg)
-            except:
-                print('Receive invalid message')
-                print(line)
+                    for tp, messages in msg_pack.items():
+                        for msg in messages:
+                            msg_list.append(msg.value.decode('utf-8').strip())
+
+                    if len(messages):
+                        is_working = True
+                    else:
+                        is_working = False
+
+            # append message into queue
+            if len(msg_list):
+                line = msg_list[0]
+                #print(line)
+                try:
+                    _msg = json.loads(line)
+                    assert 'ticketID' in _msg
+                    assert _msg.get('version', None)==2
+                    priority = _msg.pop('priority', 'high')
+                    if priority=='low' and (not self.queue.full()):
+                        self.queue.put(_msg)
+                        msg_list.pop(0)
+                    elif priority=='high' and (not self.fast_queue.full()):
+                        self.fast_queue.put(_msg)
+                        msg_list.pop(0)
+                except:
+                    print('Receive invalid message')
+                    print(line)
+                    msg_list.pop(0)
+
+                is_working = True
+
+            if not is_working:
+                time.sleep(1)
 
 
 def get_json_logger(log_level=logging.DEBUG):
@@ -679,7 +712,12 @@ if __name__ == '__main__':
         retries = 5,
     )
     #-- initialize kafka message receiver process
-    kafka_receiver = KafkaReceiver(envs['kafka'], fast_in_queue, in_queue)
+    kafka_receiver = KafkaReceiver(
+        envs['kafka'],
+        fast_in_queue,
+        in_queue,
+        envs.getint('general', 'in_queue_size'),
+    )
     kafka_receiver.start()
 
     # XXX for test: Create a message writer
