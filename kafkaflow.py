@@ -102,11 +102,7 @@ class KafkaReceiver(multiprocessing.Process):
                     for tp, messages in msg_pack.items():
                         for msg in messages:
                             msg_list.append(msg.value.decode('utf-8').strip())
-
-                    if len(messages):
-                        is_working = True
-                    else:
-                        is_working = False
+                            is_working = True
 
             # append message into queue
             if len(msg_list):
