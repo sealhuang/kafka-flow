@@ -116,7 +116,11 @@ class KafkaReceiver(multiprocessing.Process):
                     _msg = json.loads(line)
                     assert 'ticketID' in _msg
                     assert _msg.get('version', None)==2
-                    priority = _msg.pop('priority', 'high')
+                    # XXX: avoid `priority` is None
+                    if _msg.get('priority', None) is None:
+                        _msg['priority'] = 'high'
+                    priority = _msg.pop('priority')
+                    assert priority in ['high', 'low']
                     if priority=='low' and (not self.queue.full()):
                         self.queue.put(_msg)
                         msg_list.pop(0)
