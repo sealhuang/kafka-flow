@@ -135,7 +135,7 @@ class KafkaReceiver(multiprocessing.Process):
                 is_working = True
 
             if not is_working:
-                time.sleep(1)
+                time.sleep(0.5)
 
 
 def get_json_logger(log_level=logging.DEBUG):
