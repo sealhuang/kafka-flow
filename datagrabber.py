@@ -359,6 +359,8 @@ def apply_changes(change, dbclient):
             })
             if isinstance(token_info, dict):
                 token_recorded = True
+                if 'project' in token_info:
+                    project = token_info['project']
 
         # exam-chain mode
         elif 'echainAticket' in raw_doc:
