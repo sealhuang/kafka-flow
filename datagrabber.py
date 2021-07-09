@@ -376,8 +376,6 @@ def apply_changes(change, dbclient):
                 else:
                     if 'project' in token_info:
                         project = token_info['project']
-                    else:
-                        project = token_info['used_exam']
 
         if token_recorded:
             # update examUsageStats collection
