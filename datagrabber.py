@@ -374,7 +374,10 @@ def apply_changes(change, dbclient):
                     assess_token = token_info['token']
                     project = token_info['project']
                 else:
-                    project = token_info['used_exam']
+                    if 'project' in token_info:
+                        project = token_info['project']
+                    else:
+                        project = token_info['used_exam']
 
         if token_recorded:
             # update examUsageStats collection
