@@ -327,6 +327,7 @@ def apply_changes(change, dbclient):
         token_recorded = False
         assess_token = None
         project = None
+        echain_ticket_id = None
  
         # token-exam mode
         if 'assessToken' in raw_doc:
@@ -435,6 +436,8 @@ def apply_changes(change, dbclient):
             insfields['token'] = assess_token
         if project:
             insfields['project'] = project
+        if echain_ticket_id:
+            insfields['echainTicketID'] = echain_ticket_id
         insert_res = report_result_col.insert_one(insfields)
         if isinstance(insert_res.inserted_id, bson.ObjectId):
             apply_change_status = 'ok'
