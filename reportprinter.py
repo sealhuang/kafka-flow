@@ -295,7 +295,7 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
     html_file = os.path.join(base_dir, 'raw_report_%s.html'%(ticket_id))
     nbconvert_cmd = [
         'jupyter-nbconvert',
-        '--ExecutePreprocessor.timeout=60',
+        '--ExecutePreprocessor.timeout=120',
         '--execute',
         '--to html',
         '--template=' + os.path.join(base_dir,'templates','report_sample.tpl'),
