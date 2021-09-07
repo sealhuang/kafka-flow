@@ -332,11 +332,7 @@ def generate_report(msg, out_queue, cache_queue, bucket, base_url,
     try:
         calc_data = json.load(open(result_file))
         if len(calc_data):
-            if 'public_data' in calc_data:
-                uploaded_msg['reportData'] = {
-                    'report_type': dict(calc_data['public_data'])
-                }
-            #uploaded_msg['reportData'] = {report_type: dict(calc_data)}
+            uploaded_msg['reportData'] = {report_type: dict(calc_data)}
             result_data['reportData'] = calc_data
         else:
             result_file = None
