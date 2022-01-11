@@ -101,18 +101,19 @@ if __name__ == '__main__':
     res_coll = pool_db[db_config.get('result_collection')]
 
     #-- initialize kafka message receiver
+    kafka_config = envs['kafka']
     consumer = KafkaConsumer(
-        envs.get('send_topic'),
-        group_id = envs.get('rec_grp'),
+        kafka_config.get('send_topic'),
+        group_id = kafka_config.get('rec_grp'),
         # enable_auto_commit=True,
         # auto_commit_interval_ms=2,
         #api_version = (0, 10),
-        sasl_mechanism = envs.get('sasl_mechanism'),
-        security_protocol = envs.get('security_protocol'),
-        sasl_plain_username = envs.get('user'),
-        sasl_plain_password = envs.get('pwd'),
-        bootstrap_servers = envs.get('bootstrap_servers').split(','),
-        auto_offset_reset = envs.get('auto_offset_rst'),
+        sasl_mechanism = kafka_config.get('sasl_mechanism'),
+        security_protocol = kafka_config.get('security_protocol'),
+        sasl_plain_username = kafka_config.get('user'),
+        sasl_plain_password = kafka_config.get('pwd'),
+        bootstrap_servers = kafka_config.get('bootstrap_servers').split(','),
+        auto_offset_reset = kafka_config.get('auto_offset_rst'),
     )
 
     for raw_msg in consumer:
