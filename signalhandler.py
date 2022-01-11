@@ -100,45 +100,59 @@ if __name__ == '__main__':
     pool_db = dbclient[db_config.get('pool_db')]
     res_coll = pool_db[db_config.get('result_collection')]
 
-    # create data queue
-    data_manager = multiprocessing.Manager()
-    in_queue_size = 50
-    in_queue = data_manager.Queue(in_queue_size)
-
-    #-- initialize kafka message receiver process
-    kafka_receiver = KafkaReceiver(
-        envs['kafka'],
-        in_queue,
-        in_queue_size,
+    #-- initialize kafka message receiver
+    consumer = KafkaConsumer(
+        envs.get('send_topic'),
+        group_id = envs.get('rec_grp'),
+        # enable_auto_commit=True,
+        # auto_commit_interval_ms=2,
+        #api_version = (0, 10),
+        sasl_mechanism = envs.get('sasl_mechanism'),
+        security_protocol = envs.get('security_protocol'),
+        sasl_plain_username = envs.get('user'),
+        sasl_plain_password = envs.get('pwd'),
+        bootstrap_servers = envs.get('bootstrap_servers').split(','),
+        auto_offset_reset = envs.get('auto_offset_rst'),
     )
-    kafka_receiver.start()
 
-    # handling report results
-    while True:
-        on_duty = False
+    for raw_msg in consumer:
+        msg = raw_msg.value.decode('utf-8').strip()
+        print(type(msg))
+        _msg = json.loads(msg)
+        print(type(_msg))
+        if 'id' in _msg and _msg['status']=='ok':
+            print(_msg)
 
-        # process new message
-        if not in_queue.empty():
-            msg = in_queue.get()
-            #print(msg)
 
-            # for Shanghai Yuanbo - subjectSuitabilityPersonal_v1
-            if msg['report_type']=='subjectSuitabilityPersonal_v1':
-                ticket_id = msg['id']
-                # get result_info from db
-                res_item = res_coll.find_one({'ticketID': ticket_id})
-                if not isinstance(ans_item, dict):
-                    print('Not find ticket info of %s from results sheet' % (
-                        ticket_id
-                    ))
-                    continue
 
-                if res_item['project']=='远播-高一选科-高一分科':
-                    token = res_item['token']
-                    print(token)
 
-            on_duty = True
 
-        if not on_duty:
-            time.sleep(0.01)
+    ## handling report results
+    #while True:
+    #    on_duty = False
+
+    #    # process new message
+    #    if not in_queue.empty():
+    #        msg = in_queue.get()
+    #        #print(msg)
+
+    #        # for Shanghai Yuanbo - subjectSuitabilityPersonal_v1
+    #        if msg['report_type']=='subjectSuitabilityPersonal_v1':
+    #            ticket_id = msg['id']
+    #            # get result_info from db
+    #            res_item = res_coll.find_one({'ticketID': ticket_id})
+    #            if not isinstance(ans_item, dict):
+    #                print('Not find ticket info of %s from results sheet' % (
+    #                    ticket_id
+    #                ))
+    #                continue
+
+    #            if res_item['project']=='远播-高一选科-高一分科':
+    #                token = res_item['token']
+    #                print(token)
+
+    #        on_duty = True
+
+    #    if not on_duty:
+    #        time.sleep(0.01)
 
