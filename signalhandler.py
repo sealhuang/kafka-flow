@@ -5,6 +5,7 @@ import json
 import time
 import multiprocessing
 from configparser import ConfigParser
+import requests
 
 from kafka import KafkaConsumer
 
@@ -36,6 +37,7 @@ if __name__ == '__main__':
     consumer = KafkaConsumer(
         kafka_config.get('send_topic'),
         group_id = kafka_config.get('rec_grp'),
+        #group_id = 'test10',
         # enable_auto_commit=True,
         # auto_commit_interval_ms=2,
         #api_version = (0, 10),
@@ -50,13 +52,13 @@ if __name__ == '__main__':
     for raw_msg in consumer:
         msg = raw_msg.value.decode('utf-8').strip()
         msg = json.loads(msg)
-        if 'id' in _msg and _msg['status']=='ok':
+        if 'id' in msg and msg['status']=='ok':
             # for Shanghai Yuanbo - subjectSuitabilityPersonal_v1
             if msg['report_type']=='subjectSuitabilityPersonal_v1':
                 ticket_id = msg['id']
                 # get result_info from db
                 res_item = res_coll.find_one({'ticketID': ticket_id})
-                if not isinstance(ans_item, dict):
+                if not isinstance(res_item, dict):
                     print('Not find ticket info of %s from results sheet' % (
                         ticket_id
                     ))
@@ -64,7 +66,15 @@ if __name__ == '__main__':
 
                 if res_item['project']=='远播-高一选科-高一分科':
                     token = res_item['token']
-                    print(token)
+                    #print(token)
+                    url = 'https://apiv4.diyigaokao.com/userTestBenben/success?'
+                    #url = 'https://apiv4.diyigaokao.com/userTestBenben/success?success=1&code=${assess_token}'
+                    d = {'success': '1', 'code': token}
+                    r = requests.post(url, data=d)
+                    if not r.status_code==200:
+                        r = requests.post(url, data=d)
+                        print('Try err for code %s, retrying...' % (token))
+                    else:
+                        print('Signal OK - %s'% (token))
 
-            on_duty = True
 
