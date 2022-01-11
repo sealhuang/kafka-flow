@@ -67,13 +67,20 @@ if __name__ == '__main__':
                 if res_item['project']=='远播-高一选科-高一分科':
                     token = res_item['token']
                     #print(token)
-                    url = 'https://apiv4.diyigaokao.com/userTestBenben/success?'
-                    #url = 'https://apiv4.diyigaokao.com/userTestBenben/success?success=1&code=${assess_token}'
+                    url = 'https://apiv4.diyigaokao.com/userTestBenben/success'
+                    headers = {'Content-Type': 'application/json'}
                     d = {'success': '1', 'code': token}
-                    r = requests.post(url, data=d)
-                    if not r.status_code==200:
-                        r = requests.post(url, data=d)
-                        print('Try err for code %s, retrying...' % (token))
+                    r = requests.post(url, json.dumps(d), headers=headers)
+                    ret = json.loads(r.text)
+                    #print(ret)
+                    # try again
+                    if not ret['error']==0:
+                        r = requests.post(url, json.dumps(d), headers=headers)
+                        ret = json.loads(r.text)
+                        if not ret['error']==0:
+                            print('Err for code %s' % (token))
+                        else:
+                            print('Signal OK - %s'% (token))
                     else:
                         print('Signal OK - %s'% (token))
 
